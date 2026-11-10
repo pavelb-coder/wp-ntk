@@ -10,8 +10,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class WP_NTK_Account {
 
 	private $recovery;
+	private $projects;
 
-	public function __construct( $recovery ) { $this->recovery = $recovery; }
+	public function __construct( $recovery, $projects ) { $this->recovery = $recovery; $this->projects = $projects; }
 
 	/** HTML-id блока кабинета: к нему страница прокручивается после входа и регистрации. */
 	const ANCHOR = 'wp-ntk-account';
@@ -363,6 +364,7 @@ final class WP_NTK_Account {
 
 		if ( is_user_logged_in() ) {
 			$this->render_cabinet();
+			$this->projects->render();
 		} elseif ( $this->recovery->render() ) {
 			// Форма восстановления уже выведена.
 		} elseif ( 'register' === $this->guest_view() ) {

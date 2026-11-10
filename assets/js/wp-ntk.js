@@ -49,9 +49,26 @@
 		} );
 	}
 
+	function initProjectTimers() {
+		each( document.querySelectorAll( '.wp-ntk-countdown' ), function ( element ) {
+			var serverNow = Number( element.getAttribute( 'data-now' ) );
+			var startedAt = Date.now();
+			function update() {
+				var seconds = Math.max( 0, Number( element.getAttribute( 'data-end' ) ) - serverNow - Math.floor( ( Date.now() - startedAt ) / 1000 ) );
+				if ( ! seconds ) { element.textContent = 'Срок завершился; обновите страницу.'; return; }
+				var days = Math.floor( seconds / 86400 ); seconds %= 86400;
+				var hours = Math.floor( seconds / 3600 ); seconds %= 3600;
+				var minutes = Math.floor( seconds / 60 );
+				element.textContent = 'До окончания: ' + days + ' д. ' + hours + ' ч. ' + minutes + ' мин. ' + ( seconds % 60 ) + ' сек.';
+			}
+			update(); window.setInterval( update, 1000 );
+		} );
+	}
+
 	function init() {
 		initPasswordToggles();
 		initSubmitGuard();
+		initProjectTimers();
 	}
 
 	if ( 'loading' === document.readyState ) {
