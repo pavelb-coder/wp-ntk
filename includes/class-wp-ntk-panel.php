@@ -15,7 +15,16 @@ final class WP_NTK_Panel {
  public function save() {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Недостаточно прав.', 'wp-ntk' ) ); }
   check_admin_referer( 'wp_ntk_settings' );
+  $text = isset( $_POST['wp_ntk_consent_text'] ) && is_string( $_POST['wp_ntk_consent_text'] ) ? sanitize_textarea_field( wp_unslash( $_POST['wp_ntk_consent_text'] ) ) : '';
+  $raw_url = isset( $_POST['wp_ntk_consent_url'] ) && is_string( $_POST['wp_ntk_consent_url'] ) ? trim( wp_unslash( $_POST['wp_ntk_consent_url'] ) ) : '';
+  $url = esc_url_raw( $raw_url, array( 'http', 'https' ) );
+  $parts = $url ? wp_parse_url( $url ) : false;
+  if ( '' === trim( $text ) || WP_NTK_Fields::length( $text ) > 2000 || ( '' !== $raw_url && ( ! $url || ! is_array( $parts ) || empty( $parts['host'] ) || empty( $parts['scheme'] ) || ! in_array( strtolower( $parts['scheme'] ), array( 'http', 'https' ), true ) ) ) ) {
+   wp_die( 'Укажите текст согласия (не более 2000 символов) и, при необходимости, полный адрес документа с http:// или https://. Вернитесь назад и исправьте настройки.' );
+  }
   update_option( self::CLOSED_OPTION, empty( $_POST['wp_ntk_closed'] ) ? '0' : '1' );
+  update_option( 'wp_ntk_consent_text', $text );
+  update_option( 'wp_ntk_consent_url', $url );
   wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk&updated=1' ) ); exit;
  }
  public function export() {
@@ -59,7 +68,12 @@ final class WP_NTK_Panel {
   <?php if ( $page_id ) : ?><p><a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Открыть страницу кабинета</a> | <a href="<?php echo esc_url( get_edit_post_link( $page_id ) ); ?>">Редактировать страницу</a></p><?php else : ?><p>Опубликованная страница кабинета не найдена. Добавьте шорткод <code>[wp_ntk_account]</code> на страницу.</p><?php endif; ?>
   <h2>Регистрация</h2><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
   <input type="hidden" name="action" value="wp_ntk_settings"><?php wp_nonce_field( 'wp_ntk_settings' ); ?>
-  <p><label><input type="checkbox" name="wp_ntk_closed" value="1" <?php checked( get_option( self::CLOSED_OPTION ), '1' ); ?>> Закрыть регистрацию новых наставников</label></p><p class="description">Вход существующих пользователей останется доступен.</p><?php submit_button(); ?></form>
+  <p><label><input type="checkbox" name="wp_ntk_closed" value="1" <?php checked( get_option( self::CLOSED_OPTION ), '1' ); ?>> Закрыть регистрацию новых наставников</label></p><p class="description">Вход существующих пользователей останется доступен.</p>
+  <h3>Согласие на обработку персональных данных</h3>
+  <p><label for="wp-ntk-consent-text">Текст согласия (обязательно)</label><br><textarea id="wp-ntk-consent-text" name="wp_ntk_consent_text" class="large-text" rows="3" maxlength="2000" required><?php echo esc_textarea( WP_NTK_Setup::consent_text() ); ?></textarea></p>
+  <p><label for="wp-ntk-consent-url">Ссылка на документ (необязательно)</label><br><input id="wp-ntk-consent-url" name="wp_ntk_consent_url" class="regular-text" type="url" placeholder="https://example.org/document" value="<?php echo esc_attr( WP_NTK_Setup::consent_url() ); ?>"></p>
+  <p class="description">Проверьте текст и документ с юристом. Согласие обязательно для новых регистраций. Существующие пользователи повторно не запрашиваются.</p>
+  <?php submit_button(); ?></form>
   <h2>Наставники</h2><p>Всего найдено: <?php echo (int) $query->get_total(); ?></p>
   <form method="get"><input type="hidden" name="page" value="wp-ntk"><label for="wp-ntk-search">Поиск по имени, логину или email</label> <input id="wp-ntk-search" name="s" value="<?php echo esc_attr( $search ); ?>"> <button class="button">Найти</button></form>
   <p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wp_ntk_export' ), 'wp_ntk_export' ) ); ?>">Выгрузить всех наставников в CSV</a></p>

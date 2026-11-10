@@ -115,6 +115,13 @@ final class WP_NTK_Account {
 		}
 
 		$errors = WP_NTK_Fields::validate( $values );
+		$accepted = isset( $_POST['wp_ntk_consent'] ) && is_string( $_POST['wp_ntk_consent'] ) && '1' === wp_unslash( $_POST['wp_ntk_consent'] );
+		$revision = $this->post_text( 'wp_ntk_consent_revision' );
+		if ( ! $accepted ) {
+			$errors['consent'] = __( 'Необходимо согласие на обработку персональных данных.', 'wp-ntk' );
+		} elseif ( ! hash_equals( WP_NTK_Setup::consent_revision(), $revision ) ) {
+			$errors['consent'] = __( 'Условия согласия изменились. Ознакомьтесь с ними и подтвердите согласие заново.', 'wp-ntk' );
+		}
 
 		if ( '' === $email ) {
 			$errors['email'] = __( 'Заполните это поле.', 'wp-ntk' );
@@ -160,6 +167,13 @@ final class WP_NTK_Account {
 		}
 
 		WP_NTK_Fields::save( $user_id, $values );
+		// Сохраняем текст и адрес, действовавшие при регистрации, а не только текущие настройки.
+		update_user_meta( $user_id, 'wp_ntk_consent', wp_slash( array(
+			'accepted_at_utc' => gmdate( 'Y-m-d H:i:s' ),
+			'text' => WP_NTK_Setup::consent_text(),
+			'url' => WP_NTK_Setup::consent_url(),
+			'revision' => WP_NTK_Setup::consent_revision(),
+		) ) );
 
 		/**
 		 * Наставник зарегистрировался.
@@ -459,6 +473,13 @@ final class WP_NTK_Account {
 			<div class="wp-ntk-hp" aria-hidden="true">
 				<label for="wp-ntk-register-website"><?php esc_html_e( 'Не заполняйте это поле', 'wp-ntk' ); ?></label>
 				<input type="text" id="wp-ntk-register-website" name="wp_ntk_website" value="" tabindex="-1" autocomplete="off">
+			</div>
+
+			<div class="wp-ntk-field<?php echo isset( $this->errors['register']['consent'] ) ? ' wp-ntk-field--error' : ''; ?>">
+				<p class="wp-ntk-check"><label><input type="checkbox" name="wp_ntk_consent" value="1" required <?php echo isset( $this->errors['register']['consent'] ) ? 'aria-invalid="true" aria-describedby="wp-ntk-consent-error"' : ''; ?>> <?php echo esc_html( WP_NTK_Setup::consent_text() ); ?> <span class="wp-ntk-required" aria-hidden="true">*</span></label></p>
+				<?php if ( WP_NTK_Setup::consent_url() ) : ?><p><a href="<?php echo esc_url( WP_NTK_Setup::consent_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Документ об обработке персональных данных (откроется в новой вкладке)', 'wp-ntk' ); ?></a></p><?php endif; ?>
+				<?php if ( isset( $this->errors['register']['consent'] ) ) : ?><p class="wp-ntk-error" id="wp-ntk-consent-error"><?php echo esc_html( $this->errors['register']['consent'] ); ?></p><?php endif; ?>
+				<input type="hidden" name="wp_ntk_consent_revision" value="<?php echo esc_attr( WP_NTK_Setup::consent_revision() ); ?>">
 			</div>
 
 			<?php $this->render_hidden( 'register' ); ?>

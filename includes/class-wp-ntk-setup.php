@@ -21,6 +21,17 @@ final class WP_NTK_Setup {
 	/** Метка «плагин только что активирован» для сообщения в админке. */
 	const NOTICE_TRANSIENT = 'wp_ntk_activation_notice';
 
+	/** Текущие условия согласия. */
+	public static function consent_text() {
+		return (string) get_option( 'wp_ntk_consent_text', 'Я согласен(на) на обработку персональных данных.' );
+	}
+	public static function consent_url() {
+		return (string) get_option( 'wp_ntk_consent_url', '' );
+	}
+	public static function consent_revision() {
+		return hash( 'sha256', self::consent_text() . "\n" . self::consent_url() );
+	}
+
 	/**
 	 * Активация плагина.
 	 */
