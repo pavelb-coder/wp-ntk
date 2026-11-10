@@ -108,6 +108,12 @@ final class WP_NTK_Account {
 			return;
 		}
 
+		$protection_error = WP_NTK_Protection::check( 'register' );
+		if ( $protection_error ) {
+			$this->errors['register'] = array( '_form' => $protection_error );
+			return;
+		}
+
 		// Поле-ловушка: человек его не видит и не заполняет, а спам-бот заполняет.
 		if ( '' !== $this->post_text( 'wp_ntk_website' ) ) {
 			$this->errors['register'] = array( '_form' => __( 'Не удалось отправить форму. Попробуйте ещё раз.', 'wp-ntk' ) );
@@ -204,6 +210,12 @@ final class WP_NTK_Account {
 
 		if ( ! $this->verify_nonce( 'login' ) ) {
 			$this->errors['login'] = array( '_form' => $this->expired_message() );
+			return;
+		}
+
+		$protection_error = WP_NTK_Protection::check( 'login' );
+		if ( $protection_error ) {
+			$this->errors['login'] = array( '_form' => $protection_error );
 			return;
 		}
 
@@ -482,6 +494,7 @@ final class WP_NTK_Account {
 				<input type="hidden" name="wp_ntk_consent_revision" value="<?php echo esc_attr( WP_NTK_Setup::consent_revision() ); ?>">
 			</div>
 
+			<?php WP_NTK_Protection::render_captcha( 'register' ); ?>
 			<?php $this->render_hidden( 'register' ); ?>
 			<div class="wp-ntk-actions">
 				<button type="submit" class="wp-ntk-button"><?php esc_html_e( 'Зарегистрироваться', 'wp-ntk' ); ?></button>
@@ -528,6 +541,7 @@ final class WP_NTK_Account {
 			<p class="wp-ntk-check">
 				<label><input type="checkbox" name="wp_ntk_remember" value="1"> <?php esc_html_e( 'Запомнить меня', 'wp-ntk' ); ?></label>
 			</p>
+			<?php WP_NTK_Protection::render_captcha( 'login' ); ?>
 			<?php $this->render_hidden( 'login' ); ?>
 			<div class="wp-ntk-actions">
 				<button type="submit" class="wp-ntk-button"><?php esc_html_e( 'Войти', 'wp-ntk' ); ?></button>

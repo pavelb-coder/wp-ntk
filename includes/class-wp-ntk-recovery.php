@@ -39,6 +39,12 @@ final class WP_NTK_Recovery {
   if ( ! wp_verify_nonce( $this->input( $_POST, 'wp_ntk_recovery_nonce' ), 'wp_ntk_recovery_' . $action ) ) {
    $this->errors[] = 'Срок действия формы истёк. Обновите страницу и попробуйте снова.'; return;
   }
+  if ( 'reset' === $action ) {
+   $this->login = $this->input( $_POST, 'wp_ntk_reset_login' );
+   $this->key = $this->input( $_POST, 'wp_ntk_reset_key' );
+  }
+  $protection_error = WP_NTK_Protection::check( $action );
+  if ( $protection_error ) { $this->errors[] = $protection_error; return; }
   if ( 'forgot' === $action ) {
    $email = sanitize_email( $this->input( $_POST, 'wp_ntk_recovery_email' ) );
    if ( ! is_email( $email ) ) { $this->errors[] = 'Укажите корректный адрес электронной почты.'; return; }
@@ -92,6 +98,7 @@ final class WP_NTK_Recovery {
     echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="wp-ntk-reset-password">Новый пароль</label><input class="wp-ntk-input" type="password" id="wp-ntk-reset-password" name="wp_ntk_reset_password" minlength="12" autocomplete="new-password" required></div>';
     echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="wp-ntk-reset-confirmation">Повторите пароль</label><input class="wp-ntk-input" type="password" id="wp-ntk-reset-confirmation" name="wp_ntk_reset_confirmation" minlength="12" autocomplete="new-password" required></div>';
    }
+   WP_NTK_Protection::render_captcha( $view );
    echo '<div class="wp-ntk-actions"><button class="wp-ntk-button" type="submit">' . ( 'forgot' === $view ? 'Отправить ссылку' : 'Изменить пароль' ) . '</button></div></form>';
   }
   echo '<p class="wp-ntk-switch"><a href="' . esc_url( $url ) . '">Вернуться ко входу</a>';

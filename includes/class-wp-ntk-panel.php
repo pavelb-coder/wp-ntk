@@ -23,6 +23,8 @@ final class WP_NTK_Panel {
    wp_die( 'Укажите текст согласия (не более 2000 символов) и, при необходимости, полный адрес документа с http:// или https://. Вернитесь назад и исправьте настройки.' );
   }
   update_option( self::CLOSED_OPTION, empty( $_POST['wp_ntk_closed'] ) ? '0' : '1' );
+  update_option( WP_NTK_Protection::CAPTCHA_OPTION, empty( $_POST['wp_ntk_captcha_enabled'] ) ? '0' : '1' );
+  update_option( WP_NTK_Protection::LIMIT_OPTION, empty( $_POST['wp_ntk_limit_enabled'] ) ? '0' : '1' );
   update_option( 'wp_ntk_consent_text', $text );
   update_option( 'wp_ntk_consent_url', $url );
   wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk&updated=1' ) ); exit;
@@ -69,6 +71,10 @@ final class WP_NTK_Panel {
   <h2>Регистрация</h2><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
   <input type="hidden" name="action" value="wp_ntk_settings"><?php wp_nonce_field( 'wp_ntk_settings' ); ?>
   <p><label><input type="checkbox" name="wp_ntk_closed" value="1" <?php checked( get_option( self::CLOSED_OPTION ), '1' ); ?>> Закрыть регистрацию новых наставников</label></p><p class="description">Вход существующих пользователей останется доступен.</p>
+  <h3>Защита форм плагина</h3>
+  <p><label><input type="checkbox" name="wp_ntk_captcha_enabled" value="1" <?php checked( get_option( WP_NTK_Protection::CAPTCHA_OPTION, '0' ), '1' ); ?>> Включить проверочный арифметический вопрос</label></p>
+  <p><label><input type="checkbox" name="wp_ntk_limit_enabled" value="1" <?php checked( get_option( WP_NTK_Protection::LIMIT_OPTION, '0' ), '1' ); ?>> Ограничить отправки: не более 5 на IP за 15 минут для каждой формы</label></p>
+  <p class="description">Применяется к регистрации, входу, запросу и смене пароля через формы плагина. Проверочный вопрос — простая защита, не замена внешней капче. Стандартные формы WordPress и других плагинов не защищаются. За прокси несколько посетителей могут иметь общий IP.</p>
   <h3>Согласие на обработку персональных данных</h3>
   <p><label for="wp-ntk-consent-text">Текст согласия (обязательно)</label><br><textarea id="wp-ntk-consent-text" name="wp_ntk_consent_text" class="large-text" rows="3" maxlength="2000" required><?php echo esc_textarea( WP_NTK_Setup::consent_text() ); ?></textarea></p>
   <p><label for="wp-ntk-consent-url">Ссылка на документ (необязательно)</label><br><input id="wp-ntk-consent-url" name="wp_ntk_consent_url" class="regular-text" type="url" placeholder="https://example.org/document" value="<?php echo esc_attr( WP_NTK_Setup::consent_url() ); ?>"></p>
