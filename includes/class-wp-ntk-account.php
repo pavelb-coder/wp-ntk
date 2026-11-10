@@ -269,6 +269,7 @@ final class WP_NTK_Account {
 
 		$user = wp_get_current_user();
 		WP_NTK_Fields::save( $user->ID, $values );
+		do_action( 'wp_ntk_mentor_profile_updated', $user->ID );
 
 		// У наставника отображаемое имя в WordPress совпадает с ФИО.
 		if ( WP_NTK_Setup::is_mentor( $user ) && $user->display_name !== $values['fio'] ) {
