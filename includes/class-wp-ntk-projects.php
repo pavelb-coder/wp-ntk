@@ -33,6 +33,8 @@ final class WP_NTK_Projects {
   $now = time();
   return array( 'state' => $now < $start->getTimestamp() ? 'before' : ( $now >= $end->getTimestamp() ? 'after' : 'open' ), 'start' => $start, 'end' => $end );
  }
+ /** Окончание приёма — основание закрыть регистрацию новых аккаунтов. */
+ public function registration_period_ended() { return 'after' === $this->period()['state']; }
  public function can_register() {
   if ( ! is_user_logged_in() ) { return false; }
   $user = wp_get_current_user();
@@ -68,7 +70,7 @@ final class WP_NTK_Projects {
   <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="wp_ntk_projects_settings"><?php wp_nonce_field( 'wp_ntk_projects_settings' ); ?>
   <h2>Номинации</h2><p>Изменение названия меняет отображаемое название у всех ранее поданных проектов этой номинации.</p>
   <?php for ( $i = 1; $i <= 4; $i++ ) : ?><p><label>Номинация <?php echo (int) $i; ?> <input type="text" class="regular-text" maxlength="200" required name="nomination_<?php echo (int) $i; ?>" value="<?php echo esc_attr( $c['nominations'][ (string) $i ] ); ?>"></label></p><?php endfor; ?>
-  <h2>Период приёма</h2><p>Время сайта: <?php echo esc_html( wp_timezone_string() ); ?>. Начало включительно, окончание — момент закрытия. Если обе даты пусты, приём закрыт.</p>
+  <h2>Период приёма</h2><p>Время сайта: <?php echo esc_html( wp_timezone_string() ); ?>. Начало включительно, окончание — момент закрытия. Если обе даты пусты, приём закрыт. После окончания этого периода регистрация новых пользователей закрывается автоматически. Продление срока снова откроет регистрацию, если она не закрыта вручную.</p>
   <p><label>Начало <input type="datetime-local" name="start" value="<?php echo esc_attr( $c['start'] ); ?>"></label> <label>Окончание <input type="datetime-local" name="end" value="<?php echo esc_attr( $c['end'] ); ?>"></label></p>
   <?php submit_button( 'Сохранить настройки' ); ?></form>
   <h2>Все проекты</h2><p>Всего: <?php echo (int) $q->found_posts; ?></p>

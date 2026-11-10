@@ -87,12 +87,17 @@ final class WP_NTK_Account {
 	/**
 	 * Регистрация наставника.
 	 */
+	/** Регистрация закрывается вручную или после завершения приёма проектов. */
+	private function registration_closed() {
+		return '1' === get_option( 'wp_ntk_registration_closed' ) || $this->projects->registration_period_ended();
+	}
+
 	private function handle_register() {
 		if ( is_user_logged_in() ) {
 			$this->redirect();
 		}
 
-		if ( '1' === get_option( 'wp_ntk_registration_closed' ) ) {
+		if ( $this->registration_closed() ) {
 			$this->values['register'] = array();
 			$this->errors['register'] = array( '_form' => __( 'Регистрация сейчас закрыта.', 'wp-ntk' ) );
 			return;
@@ -442,7 +447,7 @@ final class WP_NTK_Account {
 	 * Форма регистрации.
 	 */
 	private function render_register() {
-		if ( '1' === get_option( 'wp_ntk_registration_closed' ) ) {
+		if ( $this->registration_closed() ) {
 			echo '<p>' . esc_html__( 'Регистрация сейчас закрыта.', 'wp-ntk' ) . '</p>';
 			echo '<p><a href="' . esc_url( $this->page_url() ) . '">' . esc_html__( 'Войти', 'wp-ntk' ) . '</a></p>';
 			return;
