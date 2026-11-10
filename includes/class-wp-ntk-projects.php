@@ -143,7 +143,6 @@ final class WP_NTK_Projects {
   if ( isset( $_GET['ntk_project_saved'] ) ) { echo '<div class="wp-ntk-notice wp-ntk-notice--success">Проект сохранён.</div>'; }
   if ( 'unset' === $period['state'] ) { echo '<p>Период регистрации проектов ещё не настроен.</p>'; }
   else {
-   echo '<p>Приём: с ' . esc_html( $period['start']->format( 'd.m.Y H:i' ) ) . ' до ' . esc_html( $period['end']->format( 'd.m.Y H:i' ) ) . ' (' . esc_html( wp_timezone_string() ) . ').</p>';
    if ( 'open' === $period['state'] ) { echo '<p>Приём открыт. <span class="wp-ntk-countdown" data-end="' . esc_attr( $period['end']->getTimestamp() ) . '" data-now="' . esc_attr( time() ) . '"></span></p>'; }
    elseif ( 'before' === $period['state'] ) { echo '<p>Приём ещё не начался.</p>'; } else { echo '<p>Приём завершён.</p>'; }
   }
