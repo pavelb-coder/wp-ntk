@@ -160,11 +160,12 @@ final class WP_NTK_Projects {
   if ( $v && 'open' === $period['state'] ) {
    echo '<h3>' . ( $v['id'] ? 'Изменить проект' : 'Регистрация проекта' ) . '</h3><form class="wp-ntk-form" id="wp-ntk-project-form" method="post" action="' . esc_url( $url . '#wp-ntk-projects' ) . '">';
    echo '<input type="hidden" name="wp_ntk_project_action" value="save"><input type="hidden" name="wp_ntk_project_id" value="' . (int) $v['id'] . '">'; wp_nonce_field( 'wp_ntk_project_save', 'wp_ntk_project_nonce' );
-   echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-title">Название проекта *</label><input class="wp-ntk-input" id="ntk-project-title" name="wp_ntk_project_title" maxlength="200" required value="' . esc_attr( $v['title'] ) . '"></div>';
-   echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-description">Описание проекта *</label><textarea class="wp-ntk-input" id="ntk-project-description" name="wp_ntk_project_description" maxlength="5000" rows="5" required>' . esc_textarea( $v['description'] ) . '</textarea></div>';
    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-nomination">Номинация *</label><select class="wp-ntk-input" id="ntk-project-nomination" name="wp_ntk_project_nomination" required><option value="">Выберите номинацию</option>';
    foreach ( $c['nominations'] as $id => $name ) { echo '<option value="' . esc_attr( $id ) . '" ' . selected( (string) $id, $v['nomination'], false ) . '>' . esc_html( $name ) . '</option>'; }
-   echo '</select></div><button class="wp-ntk-button" type="submit">Сохранить проект</button></form>';
+   echo '</select></div>';
+   echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-title">Название проекта *</label><input class="wp-ntk-input" id="ntk-project-title" name="wp_ntk_project_title" maxlength="200" required value="' . esc_attr( $v['title'] ) . '"></div>';
+   echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-description">Описание проекта *</label><textarea class="wp-ntk-input" id="ntk-project-description" name="wp_ntk_project_description" maxlength="5000" rows="5" required>' . esc_textarea( $v['description'] ) . '</textarea></div>';
+   echo '<button class="wp-ntk-button" type="submit">Сохранить проект</button></form>';
   }
   echo '</section>';
  }
