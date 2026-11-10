@@ -33,7 +33,11 @@ final class WP_NTK_Projects {
   $now = time();
   return array( 'state' => $now < $start->getTimestamp() ? 'before' : ( $now >= $end->getTimestamp() ? 'after' : 'open' ), 'start' => $start, 'end' => $end );
  }
- public function can_register() { return is_user_logged_in() && ( WP_NTK_Setup::is_mentor( wp_get_current_user() ) || current_user_can( 'manage_options' ) ); }
+ public function can_register() {
+  if ( ! is_user_logged_in() ) { return false; }
+  $user = wp_get_current_user();
+  return WP_NTK_Setup::is_mentor( $user ) || in_array( 'subscriber', (array) $user->roles, true ) || current_user_can( 'manage_options' );
+ }
  private function post_value( $name ) { return isset( $_POST[ $name ] ) && is_string( $_POST[ $name ] ) ? wp_unslash( $_POST[ $name ] ) : ''; }
  private function page_url() { return get_permalink( get_queried_object_id() ); }
  public function menu() { add_submenu_page( 'wp-ntk', 'Проекты', 'Проекты', 'manage_options', 'wp-ntk-projects', array( $this, 'admin_page' ) ); }
@@ -78,7 +82,7 @@ final class WP_NTK_Projects {
   if ( 'save' !== $this->post_value( 'wp_ntk_project_action' ) ) { return; }
   if ( ! is_singular() || ! has_shortcode( get_post_field( 'post_content', get_queried_object_id() ), WP_NTK_Setup::SHORTCODE ) ) { return; }
   nocache_headers();
-  if ( ! $this->can_register() ) { wp_die( 'Регистрация проекта доступна наставнику или администратору.', '', array( 'response' => 403 ) ); }
+  if ( ! $this->can_register() ) { wp_die( 'Регистрация проекта доступна наставнику, подписчику или администратору.', '', array( 'response' => 403 ) ); }
   $id = absint( $this->post_value( 'wp_ntk_project_id' ) );
   $this->values = array( 'id' => $id, 'title' => sanitize_text_field( $this->post_value( 'wp_ntk_project_title' ) ), 'description' => sanitize_textarea_field( $this->post_value( 'wp_ntk_project_description' ) ), 'nomination' => $this->post_value( 'wp_ntk_project_nomination' ) );
   if ( ! wp_verify_nonce( $this->post_value( 'wp_ntk_project_nonce' ), 'wp_ntk_project_save' ) ) { $this->errors[] = 'Срок действия формы истёк. Обновите страницу и попробуйте снова.'; return; }
