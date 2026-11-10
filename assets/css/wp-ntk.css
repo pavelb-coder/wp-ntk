@@ -1,0 +1,347 @@
+/*
+ * WP NTK — личный кабинет наставника.
+ * Шрифт и размер текста наследуются от темы сайта. Основной цвет можно
+ * переопределить в теме: .wp-ntk { --wp-ntk-accent: #0a7d55; }
+ */
+
+.wp-ntk {
+	--wp-ntk-accent: #1d4ed8;
+	--wp-ntk-accent-hover: #1e3fa8;
+	--wp-ntk-text: #1a1f2b;
+	--wp-ntk-border: #b9c0cc;
+	--wp-ntk-error: #b42318;
+	--wp-ntk-error-bg: #fef3f2;
+	--wp-ntk-success: #067647;
+	--wp-ntk-success-bg: #ecfdf3;
+	--wp-ntk-radius: 6px;
+
+	/* Не шире колонки текста темы, чтобы блок стоял вровень с заголовком страницы. */
+	max-width: 720px;
+	max-width: min(720px, var(--wp--style--global--content-size, 720px));
+	margin-left: auto;
+	margin-right: auto;
+	text-align: left;
+	scroll-margin-top: 5rem;
+}
+
+.wp-ntk *,
+.wp-ntk *::before,
+.wp-ntk *::after {
+	box-sizing: border-box;
+}
+
+.wp-ntk [hidden] {
+	display: none !important;
+}
+
+/* Заголовки разделов */
+
+.wp-ntk .wp-ntk-title {
+	margin: 0 0 1.25rem;
+	font-size: 1.5em;
+	line-height: 1.25;
+}
+
+.wp-ntk .wp-ntk-form + .wp-ntk-title {
+	margin-top: 2.5rem;
+	padding-top: 2rem;
+	border-top: 1px solid var(--wp-ntk-border);
+}
+
+/* Формы */
+
+.wp-ntk .wp-ntk-form {
+	margin: 0;
+	scroll-margin-top: 5rem;
+}
+
+.wp-ntk .wp-ntk-form--narrow {
+	max-width: 420px;
+}
+
+.wp-ntk .wp-ntk-fieldset {
+	min-width: 0;
+	margin: 0 0 1.5rem;
+	padding: 1.25rem 1.25rem 0.25rem;
+	border: 1px solid var(--wp-ntk-border);
+	border-radius: calc(var(--wp-ntk-radius) + 2px);
+}
+
+/* Заголовок блока стоит внутри рамки, а не разрывает её: так он аккуратно
+   переносится на узком экране. */
+.wp-ntk .wp-ntk-legend {
+	float: left;
+	width: 100%;
+	margin: 0 0 1rem;
+	padding: 0;
+	font-size: 1.125em;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+.wp-ntk .wp-ntk-legend + * {
+	clear: both;
+}
+
+.wp-ntk .wp-ntk-field {
+	margin: 0 0 1.25rem;
+}
+
+.wp-ntk .wp-ntk-label {
+	display: block;
+	margin: 0 0 0.375rem;
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.wp-ntk .wp-ntk-required {
+	color: var(--wp-ntk-error);
+}
+
+/* Цвет подсказки — приглушённый цвет текста темы: читается и на тёмном фоне. */
+.wp-ntk .wp-ntk-hint {
+	margin: 0 0 0.5rem;
+	color: inherit;
+	opacity: 0.75;
+	font-size: 0.875em;
+	font-style: italic;
+	line-height: 1.45;
+}
+
+.wp-ntk .wp-ntk-input {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
+	padding: 0.625rem 0.75rem;
+	border: 1px solid var(--wp-ntk-border);
+	border-radius: var(--wp-ntk-radius);
+	/* Фон и цвет текста закреплены вместе: если тема перекрасит только одно
+	   из двух, введённый текст может стать нечитаемым. */
+	background: #fff !important;
+	color: var(--wp-ntk-text) !important;
+	font: inherit;
+	line-height: 1.4;
+	box-shadow: none;
+}
+
+.wp-ntk textarea.wp-ntk-input {
+	min-height: 5.5rem;
+	resize: vertical;
+}
+
+.wp-ntk .wp-ntk-input:focus {
+	border-color: var(--wp-ntk-accent);
+	outline: 2px solid var(--wp-ntk-accent);
+	outline-offset: 1px;
+}
+
+.wp-ntk .wp-ntk-field--error .wp-ntk-input {
+	border-color: var(--wp-ntk-error);
+}
+
+.wp-ntk .wp-ntk-error {
+	margin: 0.375rem 0 0;
+	color: var(--wp-ntk-error);
+	font-size: 0.875em;
+	line-height: 1.4;
+}
+
+/* Пароль с кнопкой «Показать» */
+
+.wp-ntk .wp-ntk-password {
+	display: flex;
+	gap: 0.5rem;
+	align-items: stretch;
+}
+
+.wp-ntk .wp-ntk-password .wp-ntk-input {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.wp-ntk .wp-ntk-toggle {
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0 0.875rem;
+	border: 1px solid var(--wp-ntk-border);
+	border-color: var(--wp-ntk-border) !important;
+	border-radius: var(--wp-ntk-radius);
+	background: #fff !important;
+	color: var(--wp-ntk-text) !important;
+	font: inherit;
+	font-size: 0.875em;
+	font-weight: 400;
+	line-height: 1.2;
+	text-transform: none;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.wp-ntk .wp-ntk-toggle:hover {
+	border-color: var(--wp-ntk-accent) !important;
+	color: var(--wp-ntk-accent) !important;
+}
+
+.wp-ntk .wp-ntk-check {
+	margin: 0 0 1.25rem;
+}
+
+.wp-ntk .wp-ntk-check label {
+	display: inline-flex;
+	gap: 0.5rem;
+	align-items: center;
+	cursor: pointer;
+}
+
+.wp-ntk .wp-ntk-check input {
+	flex: 0 0 auto;
+	width: 1.125em;
+	height: 1.125em;
+	margin: 0;
+}
+
+/*
+ * Кнопки.
+ * Цвета закреплены через !important: многие темы красят все кнопки сайта
+ * правилами, которые сильнее обычных, и без этого фон кнопки мог бы прийти
+ * от темы, а цвет надписи — от плагина. Основной цвет по-прежнему меняется
+ * переменной --wp-ntk-accent.
+ */
+
+.wp-ntk .wp-ntk-actions {
+	margin: 0;
+}
+
+.wp-ntk .wp-ntk-button {
+	display: inline-block;
+	margin: 0;
+	padding: 0.7rem 1.5rem;
+	border: 1px solid var(--wp-ntk-accent);
+	border-color: var(--wp-ntk-accent) !important;
+	border-radius: var(--wp-ntk-radius);
+	background: var(--wp-ntk-accent) !important;
+	color: #fff !important;
+	font: inherit;
+	font-weight: 600;
+	line-height: 1.3;
+	text-align: center;
+	text-decoration: none;
+	text-transform: none;
+	box-shadow: none;
+	cursor: pointer;
+}
+
+.wp-ntk .wp-ntk-button:hover,
+.wp-ntk .wp-ntk-button:focus {
+	border-color: var(--wp-ntk-accent-hover) !important;
+	background: var(--wp-ntk-accent-hover) !important;
+	color: #fff !important;
+	text-decoration: none;
+}
+
+.wp-ntk .wp-ntk-button--secondary {
+	padding: 0.5rem 1.125rem;
+	background: #fff !important;
+	color: var(--wp-ntk-accent) !important;
+}
+
+.wp-ntk .wp-ntk-button--secondary:hover,
+.wp-ntk .wp-ntk-button--secondary:focus {
+	background: var(--wp-ntk-accent) !important;
+	color: #fff !important;
+}
+
+.wp-ntk .wp-ntk-button:focus-visible,
+.wp-ntk .wp-ntk-toggle:focus-visible {
+	outline: 2px solid var(--wp-ntk-accent);
+	outline-offset: 2px;
+}
+
+.wp-ntk .wp-ntk-form[data-submitting] .wp-ntk-button {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* Сообщения */
+
+.wp-ntk .wp-ntk-notice {
+	margin: 0 0 1.5rem;
+	padding: 0.75rem 1rem;
+	border-left: 4px solid;
+	border-radius: var(--wp-ntk-radius);
+	line-height: 1.45;
+}
+
+.wp-ntk .wp-ntk-notice--success {
+	border-color: var(--wp-ntk-success);
+	background: var(--wp-ntk-success-bg);
+	color: var(--wp-ntk-success);
+}
+
+.wp-ntk .wp-ntk-notice--error {
+	border-color: var(--wp-ntk-error);
+	background: var(--wp-ntk-error-bg);
+	color: var(--wp-ntk-error);
+}
+
+/* Ссылки под формой */
+
+.wp-ntk .wp-ntk-switch {
+	margin: 1rem 0 0;
+}
+
+/* Шапка кабинета */
+
+.wp-ntk .wp-ntk-head {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem 1.5rem;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 0 2rem;
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--wp-ntk-border);
+	border-radius: calc(var(--wp-ntk-radius) + 2px);
+}
+
+.wp-ntk .wp-ntk-user {
+	min-width: 0;
+	margin: 0;
+	line-height: 1.4;
+}
+
+.wp-ntk .wp-ntk-user-name,
+.wp-ntk .wp-ntk-user-email {
+	display: block;
+	overflow-wrap: anywhere;
+}
+
+.wp-ntk .wp-ntk-user-email {
+	opacity: 0.75;
+	font-size: 0.875em;
+}
+
+/* Поле-ловушка для спам-ботов: человеку не видно */
+
+.wp-ntk .wp-ntk-hp {
+	position: absolute !important;
+	left: -9999px !important;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+@media (max-width: 480px) {
+	.wp-ntk .wp-ntk-fieldset {
+		padding: 1rem 0.875rem 0;
+	}
+
+	.wp-ntk .wp-ntk-button {
+		width: 100%;
+	}
+
+	.wp-ntk .wp-ntk-button--secondary {
+		width: auto;
+	}
+}
