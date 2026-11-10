@@ -755,6 +755,8 @@ final class WP_NTK_Account {
 	 */
 	public function register_assets() {
 		wp_register_style( 'wp-ntk', WP_NTK_URL . 'assets/css/wp-ntk.css', array(), WP_NTK_VERSION );
+		$appearance = WP_NTK_Appearance::front_css();
+		if ( $appearance ) { wp_add_inline_style( 'wp-ntk', $appearance ); }
 		wp_register_script( 'wp-ntk', WP_NTK_URL . 'assets/js/wp-ntk.js', array(), WP_NTK_VERSION, true );
 
 		if ( $this->is_account_page() ) {
