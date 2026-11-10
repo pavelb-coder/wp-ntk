@@ -33,7 +33,7 @@ final class WP_NTK_Projects {
   $now = time();
   return array( 'state' => $now < $start->getTimestamp() ? 'before' : ( $now >= $end->getTimestamp() ? 'after' : 'open' ), 'start' => $start, 'end' => $end );
  }
- private function can_register() { return is_user_logged_in() && ( WP_NTK_Setup::is_mentor( wp_get_current_user() ) || current_user_can( 'manage_options' ) ); }
+ public function can_register() { return is_user_logged_in() && ( WP_NTK_Setup::is_mentor( wp_get_current_user() ) || current_user_can( 'manage_options' ) ); }
  private function post_value( $name ) { return isset( $_POST[ $name ] ) && is_string( $_POST[ $name ] ) ? wp_unslash( $_POST[ $name ] ) : ''; }
  private function page_url() { return get_permalink( get_queried_object_id() ); }
  public function menu() { add_submenu_page( 'wp-ntk', 'Проекты', 'Проекты', 'manage_options', 'wp-ntk-projects', array( $this, 'admin_page' ) ); }
@@ -94,14 +94,14 @@ final class WP_NTK_Projects {
   $saved = wp_insert_post( $args, true );
   if ( is_wp_error( $saved ) ) { $this->errors[] = 'Не удалось сохранить проект. Попробуйте ещё раз.'; return; }
   update_post_meta( $saved, '_wp_ntk_nomination', $v['nomination'] );
-  wp_safe_redirect( add_query_arg( 'ntk_project_saved', '1', $this->page_url() ) . '#wp-ntk-projects' ); exit;
+  wp_safe_redirect( add_query_arg( array( 'wp_ntk_tab' => 'projects', 'ntk_project_saved' => '1' ), $this->page_url() ) . '#wp-ntk-projects' ); exit;
  }
  public function render() {
   if ( ! $this->can_register() ) { return; }
-  $period = $this->period(); $c = $this->settings(); $url = $this->page_url();
+  $period = $this->period(); $c = $this->settings(); $url = add_query_arg( 'wp_ntk_tab', 'projects', $this->page_url() );
   $paged = isset( $_GET['ntk_projects_page'] ) ? max( 1, absint( $_GET['ntk_projects_page'] ) ) : 1;
   $q = new WP_Query( array( 'post_type' => self::TYPE, 'post_status' => 'private', 'author' => get_current_user_id(), 'posts_per_page' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC' ) );
-  echo '<section id="wp-ntk-projects"><h2 class="wp-ntk-title">Мои проекты</h2>';
+  echo '<section id="wp-ntk-projects"><h2 class="wp-ntk-title">Проекты</h2>';
   if ( current_user_can( 'manage_options' ) && ! WP_NTK_Setup::is_mentor( wp_get_current_user() ) ) { echo '<p>Проекты, созданные здесь, будут зарегистрированы на учётную запись администратора.</p>'; }
   if ( isset( $_GET['ntk_project_saved'] ) ) { echo '<div class="wp-ntk-notice wp-ntk-notice--success">Проект сохранён.</div>'; }
   if ( 'unset' === $period['state'] ) { echo '<p>Период регистрации проектов ещё не настроен.</p>'; }

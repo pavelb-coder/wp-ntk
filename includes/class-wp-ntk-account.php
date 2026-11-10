@@ -363,8 +363,19 @@ final class WP_NTK_Account {
 		$this->render_notice( array( 'registered', 'logged_out' ) );
 
 		if ( is_user_logged_in() ) {
-			$this->render_cabinet();
-			$this->projects->render();
+			$this->render_account_header();
+			$project_tab = $this->projects->can_register() && (
+				( isset( $_GET['wp_ntk_tab'] ) && is_string( $_GET['wp_ntk_tab'] ) && 'projects' === sanitize_key( wp_unslash( $_GET['wp_ntk_tab'] ) ) )
+				|| isset( $_GET['ntk_project_form'] ) || isset( $_GET['ntk_project_saved'] ) || isset( $_GET['ntk_projects_page'] )
+				|| ( isset( $_POST['wp_ntk_project_action'] ) && is_string( $_POST['wp_ntk_project_action'] ) && 'save' === wp_unslash( $_POST['wp_ntk_project_action'] ) )
+			);
+			if ( $this->projects->can_register() ) {
+				$base = $this->page_url();
+				echo '<nav class="wp-ntk-tabs" aria-label="Разделы личного кабинета">';
+				echo '<a class="wp-ntk-tab' . ( ! $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( $base . '#wp-ntk-account' ) . '"' . ( ! $project_tab ? ' aria-current="page"' : '' ) . '>Мои данные</a>';
+				echo '<a class="wp-ntk-tab' . ( $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( add_query_arg( 'wp_ntk_tab', 'projects', $base ) . '#wp-ntk-account' ) . '"' . ( $project_tab ? ' aria-current="page"' : '' ) . '>Проекты</a></nav>';
+			}
+			if ( $project_tab ) { $this->projects->render(); } else { $this->render_cabinet(); }
 		} elseif ( $this->recovery->render() ) {
 			// Форма восстановления уже выведена.
 		} elseif ( 'register' === $this->guest_view() ) {
@@ -563,10 +574,9 @@ final class WP_NTK_Account {
 	/**
 	 * Кабинет вошедшего пользователя.
 	 */
-	private function render_cabinet() {
+	private function render_account_header() {
 		$user   = wp_get_current_user();
 		$saved  = WP_NTK_Fields::get_values( $user->ID );
-		$values = isset( $this->values['profile'] ) ? $this->values['profile'] : $saved;
 		$name   = '' !== $saved['fio'] ? $saved['fio'] : $user->display_name;
 		$logout = wp_logout_url( add_query_arg( 'wp_ntk_notice', 'logged_out', $this->page_url() ) . '#' . self::ANCHOR );
 		?>
@@ -577,7 +587,14 @@ final class WP_NTK_Account {
 			</p>
 			<a class="wp-ntk-button wp-ntk-button--secondary" href="<?php echo esc_url( $logout ); ?>"><?php esc_html_e( 'Выйти', 'wp-ntk' ); ?></a>
 		</div>
+		<?php
+	}
 
+	private function render_cabinet() {
+		$user   = wp_get_current_user();
+		$saved  = WP_NTK_Fields::get_values( $user->ID );
+		$values = isset( $this->values['profile'] ) ? $this->values['profile'] : $saved;
+		?>
 		<h2 class="wp-ntk-title"><?php esc_html_e( 'Мои данные', 'wp-ntk' ); ?></h2>
 		<form class="wp-ntk-form" id="wp-ntk-profile" method="post" action="<?php echo esc_url( $this->page_url() . '#wp-ntk-profile' ); ?>">
 			<?php
