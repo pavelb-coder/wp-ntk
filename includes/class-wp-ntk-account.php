@@ -9,6 +9,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class WP_NTK_Account {
 
+	private $recovery;
+
+	public function __construct( $recovery ) { $this->recovery = $recovery; }
+
 	/** HTML-id блока кабинета: к нему страница прокручивается после входа и регистрации. */
 	const ANCHOR = 'wp-ntk-account';
 
@@ -332,6 +336,8 @@ final class WP_NTK_Account {
 
 		if ( is_user_logged_in() ) {
 			$this->render_cabinet();
+		} elseif ( $this->recovery->render() ) {
+			// Форма восстановления уже выведена.
 		} elseif ( 'register' === $this->guest_view() ) {
 			$this->render_register();
 		} else {
@@ -511,7 +517,7 @@ final class WP_NTK_Account {
 			<a href="<?php echo esc_url( add_query_arg( 'wp_ntk_view', 'register', $this->page_url() ) ); ?>"><?php esc_html_e( 'Зарегистрироваться', 'wp-ntk' ); ?></a>
 		</p>
 		<p class="wp-ntk-switch">
-			<a href="<?php echo esc_url( wp_lostpassword_url() ); ?>"><?php esc_html_e( 'Забыли пароль?', 'wp-ntk' ); ?></a>
+			<a href="<?php echo esc_url( add_query_arg( 'wp_ntk_view', 'forgot', $this->page_url() ) . '#wp-ntk-account' ); ?>"><?php esc_html_e( 'Забыли пароль?', 'wp-ntk' ); ?></a>
 		</p>
 		<?php
 	}
