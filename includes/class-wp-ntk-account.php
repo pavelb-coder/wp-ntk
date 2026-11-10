@@ -371,7 +371,7 @@ final class WP_NTK_Account {
 			$this->render_account_header();
 			$project_tab = $this->projects->can_register() && (
 				( isset( $_GET['wp_ntk_tab'] ) && is_string( $_GET['wp_ntk_tab'] ) && 'projects' === sanitize_key( wp_unslash( $_GET['wp_ntk_tab'] ) ) )
-				|| isset( $_GET['ntk_project_form'] ) || isset( $_GET['ntk_project_saved'] ) || isset( $_GET['ntk_projects_page'] )
+				|| isset( $_GET['ntk_project_form'] ) || isset( $_GET['ntk_project_saved'] ) || isset( $_GET['ntk_projects_page'] ) || isset( $_GET['ntk_project_view'] )
 				|| ( isset( $_POST['wp_ntk_project_action'] ) && is_string( $_POST['wp_ntk_project_action'] ) && 'save' === wp_unslash( $_POST['wp_ntk_project_action'] ) )
 			);
 			if ( $this->projects->can_register() ) {
