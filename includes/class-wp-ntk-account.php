@@ -120,9 +120,15 @@ final class WP_NTK_Account {
 			$errors['email'] = __( 'Аккаунт с такой электронной почтой уже есть. Войдите или восстановите пароль.', 'wp-ntk' );
 		}
 
-		$password_error = WP_NTK_Fields::password_error( $password );
+		$password_error = WP_NTK_Fields::registration_password_error( $password );
 		if ( '' !== $password_error ) {
 			$errors['password'] = $password_error;
+		}
+		$confirmation = trim( $this->post_password( 'wp_ntk_password_confirmation' ) );
+		if ( '' === $confirmation ) {
+			$errors['password_confirmation'] = __( 'Повторите пароль.', 'wp-ntk' );
+		} elseif ( $password !== $confirmation ) {
+			$errors['password_confirmation'] = __( 'Пароли не совпадают.', 'wp-ntk' );
 		}
 
 		if ( $errors ) {
@@ -431,11 +437,15 @@ final class WP_NTK_Account {
 					array(
 						'label'        => __( 'Пароль', 'wp-ntk' ),
 						/* translators: %d: минимальное число символов. */
-						'hint'         => sprintf( __( 'Не короче %d символов.', 'wp-ntk' ), WP_NTK_Fields::PASSWORD_MIN ),
+						'hint'         => __( 'Не менее 12 символов: заглавная и строчная латинские буквы, цифра и специальный символ.', 'wp-ntk' ),
 						'type'         => 'password',
-						'min'          => WP_NTK_Fields::PASSWORD_MIN,
+						'min'          => 12,
 						'autocomplete' => 'new-password',
 					)
+				);
+				$this->render_field(
+					'register', 'password_confirmation',
+					array( 'label' => __( 'Повторите пароль', 'wp-ntk' ), 'type' => 'password', 'min' => 12, 'autocomplete' => 'new-password' )
 				);
 				?>
 			</fieldset>

@@ -179,6 +179,17 @@ final class WP_NTK_Fields {
 		return '';
 	}
 
+	/** Требования к паролю при регистрации. */
+	public static function registration_password_error( $password ) {
+		$error = self::password_error( $password );
+		if ( '' !== $error ) { return $error; }
+		$plain = wp_unslash( $password );
+		if ( self::length( $plain ) < 12 || ! preg_match( '/[A-Z]/', $plain ) || ! preg_match( '/[a-z]/', $plain ) || ! preg_match( '/[0-9]/', $plain ) || ! preg_match( '/[^a-zA-Z0-9\s]/u', $plain ) ) {
+			return __( 'Пароль должен содержать не менее 12 символов, заглавную и строчную латинские буквы, цифру и специальный символ.', 'wp-ntk' );
+		}
+		return '';
+	}
+
 	/**
 	 * Сохранение значений анкеты пользователя.
 	 *
