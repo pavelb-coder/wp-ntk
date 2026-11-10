@@ -669,16 +669,21 @@ final class WP_NTK_Account {
 		foreach ( $attributes as $attribute => $attribute_value ) {
 			$html .= sprintf( ' %s="%s"', $attribute, esc_attr( $attribute_value ) );
 		}
-		$html .= ' required';
+		$required = ! isset( $field['required'] ) || $field['required'];
+		if ( $required ) { $html .= ' required'; }
 		?>
 		<div class="wp-ntk-field<?php echo '' !== $error ? ' wp-ntk-field--error' : ''; ?>">
-			<label class="wp-ntk-label" for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $field['label'] ); ?> <span class="wp-ntk-required" aria-hidden="true">*</span></label>
+			<label class="wp-ntk-label" for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $field['label'] ); ?> <?php if ( $required ) : ?><span class="wp-ntk-required" aria-hidden="true">*</span><?php endif; ?></label>
 			<?php if ( ! empty( $field['hint'] ) ) : ?>
 				<p class="wp-ntk-hint" id="<?php echo esc_attr( $id . '-hint' ); ?>"><?php echo esc_html( $field['hint'] ); ?></p>
 			<?php endif; ?>
 			<?php // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- $html собран выше из экранированных значений. ?>
 			<?php if ( 'textarea' === $type ) : ?>
 				<textarea<?php echo $html; ?> rows="<?php echo (int) ( isset( $field['rows'] ) ? $field['rows'] : 3 ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+			<?php elseif ( 'select' === $type ) : ?>
+				<select<?php echo $html; ?>><option value=""><?php esc_html_e( 'Выберите вариант', 'wp-ntk' ); ?></option><?php foreach ( $field['options'] as $option ) : ?><option value="<?php echo esc_attr( $option ); ?>" <?php selected( $value, $option ); ?>><?php echo esc_html( $option ); ?></option><?php endforeach; ?></select>
+			<?php elseif ( 'checkbox' === $type ) : ?>
+				<input type="checkbox"<?php echo $html; ?> value="1" <?php checked( $value, '1' ); ?>>
 			<?php elseif ( 'password' === $type ) : ?>
 				<div class="wp-ntk-password">
 					<input type="password"<?php echo $html; ?>>

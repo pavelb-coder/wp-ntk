@@ -49,6 +49,10 @@ final class WP_NTK_Admin {
 					<td>
 						<?php if ( 'textarea' === $field['type'] ) : ?>
 							<textarea id="<?php echo esc_attr( $name ); ?>" name="<?php echo esc_attr( $name ); ?>" rows="<?php echo (int) $field['rows']; ?>" class="large-text" maxlength="<?php echo (int) $field['max']; ?>"><?php echo esc_textarea( $values[ $key ] ); ?></textarea>
+						<?php elseif ( 'select' === $field['type'] ) : ?>
+							<select id="<?php echo esc_attr( $name ); ?>" name="<?php echo esc_attr( $name ); ?>"><option value="">—</option><?php if ( '' !== $values[ $key ] && ! in_array( $values[ $key ], $field['options'], true ) ) : ?><option value="<?php echo esc_attr( $values[ $key ] ); ?>" selected><?php echo esc_html( $values[ $key ] ); ?> (прежнее значение)</option><?php endif; ?><?php foreach ( $field['options'] as $option ) : ?><option value="<?php echo esc_attr( $option ); ?>" <?php selected( $values[ $key ], $option ); ?>><?php echo esc_html( $option ); ?></option><?php endforeach; ?></select>
+						<?php elseif ( 'checkbox' === $field['type'] ) : ?>
+							<input type="checkbox" id="<?php echo esc_attr( $name ); ?>" name="<?php echo esc_attr( $name ); ?>" value="1" <?php checked( $values[ $key ], '1' ); ?>>
 						<?php else : ?>
 							<input type="<?php echo esc_attr( $field['type'] ); ?>" id="<?php echo esc_attr( $name ); ?>" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( $values[ $key ] ); ?>" class="regular-text" maxlength="<?php echo (int) $field['max']; ?>">
 						<?php endif; ?>

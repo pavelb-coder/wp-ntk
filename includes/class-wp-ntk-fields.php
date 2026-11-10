@@ -26,7 +26,7 @@ final class WP_NTK_Fields {
 	 *
 	 * @return array<string,array<string,mixed>>
 	 */
-	public static function all() {
+	public static function defaults() {
 		return array(
 			'fio'          => array(
 				'label'        => __( 'ФИО наставника проекта', 'wp-ntk' ),
@@ -68,6 +68,27 @@ final class WP_NTK_Fields {
 				'autocomplete' => 'off',
 			),
 		);
+	}
+
+	/** Описания полей с настройками администратора. */
+	public static function all() {
+		$defaults = self::defaults();
+		$settings = get_option( 'wp_ntk_field_settings', array() );
+		if ( ! is_array( $settings ) ) { $settings = array(); }
+		$fields = array();
+		foreach ( $defaults as $key => $field ) {
+			$config = isset( $settings[ $key ] ) && is_array( $settings[ $key ] ) ? $settings[ $key ] : array();
+			$field['label'] = ! empty( $config['label'] ) ? $config['label'] : $field['label'];
+			$field['required'] = isset( $config['required'] ) ? (bool) $config['required'] : true;
+			$field['order'] = isset( $config['order'] ) ? (int) $config['order'] : ( count( $fields ) + 1 ) * 10;
+			$fields[ $key ] = $field;
+		}
+		foreach ( $settings as $key => $config ) {
+			if ( ! preg_match( '/^custom_[a-f0-9]{12}$/', $key ) || ! is_array( $config ) || empty( $config['label'] ) || ! in_array( $config['type'], array( 'text', 'textarea', 'select', 'checkbox' ), true ) ) { continue; }
+			$fields[ $key ] = array( 'label' => $config['label'], 'type' => $config['type'], 'required' => ! empty( $config['required'] ), 'order' => (int) $config['order'], 'options' => isset( $config['options'] ) && is_array( $config['options'] ) ? $config['options'] : array(), 'max' => 1000, 'rows' => 3, 'autocomplete' => 'off' );
+		}
+		uasort( $fields, function( $a, $b ) { return $a['order'] - $b['order']; } );
+		return $fields;
 	}
 
 	/**
@@ -139,7 +160,12 @@ final class WP_NTK_Fields {
 			$value = isset( $values[ $key ] ) ? $values[ $key ] : '';
 
 			if ( '' === $value ) {
-				$errors[ $key ] = __( 'Заполните это поле.', 'wp-ntk' );
+				if ( ! empty( $field['required'] ) ) { $errors[ $key ] = __( 'Заполните это поле.', 'wp-ntk' ); }
+				continue;
+			} elseif ( 'checkbox' === $field['type'] && '1' !== $value ) {
+				$errors[ $key ] = __( 'Недопустимое значение.', 'wp-ntk' );
+			} elseif ( 'select' === $field['type'] && ! in_array( $value, $field['options'], true ) ) {
+				$errors[ $key ] = __( 'Выберите вариант из списка.', 'wp-ntk' );
 			} elseif ( self::length( $value ) > $field['max'] ) {
 				/* translators: %d: предельное число символов. */
 				$errors[ $key ] = sprintf( __( 'Слишком длинное значение: допустимо не более %d символов.', 'wp-ntk' ), $field['max'] );

@@ -345,3 +345,6 @@
 		width: auto;
 	}
 }
+
+/* Флажки дополнительных полей не растягиваются на ширину текстового поля. */
+.wp-ntk input[type="checkbox"].wp-ntk-input { width: auto; min-height: 0; }
