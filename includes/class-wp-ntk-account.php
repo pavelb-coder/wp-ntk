@@ -87,6 +87,12 @@ final class WP_NTK_Account {
 			$this->redirect();
 		}
 
+		if ( '1' === get_option( 'wp_ntk_registration_closed' ) ) {
+			$this->values['register'] = array();
+			$this->errors['register'] = array( '_form' => __( 'Регистрация сейчас закрыта.', 'wp-ntk' ) );
+			return;
+		}
+
 		$values   = WP_NTK_Fields::from_request();
 		$email    = $this->post_text( 'wp_ntk_email' );
 		$password = trim( $this->post_password( 'wp_ntk_password' ) );
@@ -384,6 +390,11 @@ final class WP_NTK_Account {
 	 * Форма регистрации.
 	 */
 	private function render_register() {
+		if ( '1' === get_option( 'wp_ntk_registration_closed' ) ) {
+			echo '<p>' . esc_html__( 'Регистрация сейчас закрыта.', 'wp-ntk' ) . '</p>';
+			echo '<p><a href="' . esc_url( $this->page_url() ) . '">' . esc_html__( 'Войти', 'wp-ntk' ) . '</a></p>';
+			return;
+		}
 		$values = isset( $this->values['register'] ) ? $this->values['register'] : array();
 		$action = add_query_arg( 'wp_ntk_view', 'register', $this->page_url() ) . '#wp-ntk-register';
 		?>
