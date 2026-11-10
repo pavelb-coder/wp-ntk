@@ -365,6 +365,7 @@ final class WP_NTK_Account {
 
 		ob_start();
 		echo '<div class="wp-ntk" id="' . esc_attr( self::ANCHOR ) . '">';
+		echo '<p class="wp-ntk-home"><a class="wp-ntk-button wp-ntk-button--secondary" href="' . esc_url( home_url( '/' ) ) . '">' . esc_html__( 'На главную', 'wp-ntk' ) . '</a></p>';
 		$this->render_notice( array( 'registered', 'logged_out' ) );
 
 		if ( is_user_logged_in() ) {
@@ -377,8 +378,8 @@ final class WP_NTK_Account {
 			if ( $this->projects->can_register() ) {
 				$base = $this->page_url();
 				echo '<nav class="wp-ntk-tabs" aria-label="Разделы личного кабинета">';
-				echo '<a class="wp-ntk-tab' . ( ! $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( $base . '#wp-ntk-account' ) . '"' . ( ! $project_tab ? ' aria-current="page"' : '' ) . '>Мои данные</a>';
-				echo '<a class="wp-ntk-tab' . ( $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( add_query_arg( 'wp_ntk_tab', 'projects', $base ) . '#wp-ntk-account' ) . '"' . ( $project_tab ? ' aria-current="page"' : '' ) . '>Проекты</a></nav>';
+				echo '<a class="wp-ntk-tab' . ( $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( add_query_arg( 'wp_ntk_tab', 'projects', $base ) . '#wp-ntk-account' ) . '"' . ( $project_tab ? ' aria-current="page"' : '' ) . '>Проекты</a>';
+				echo '<a class="wp-ntk-tab' . ( ! $project_tab ? ' wp-ntk-tab--active' : '' ) . '" href="' . esc_url( $base . '#wp-ntk-account' ) . '"' . ( ! $project_tab ? ' aria-current="page"' : '' ) . '>Мои данные</a></nav>';
 			}
 			if ( $project_tab ) { $this->projects->render(); } else { $this->render_cabinet(); }
 		} elseif ( $this->recovery->render() ) {

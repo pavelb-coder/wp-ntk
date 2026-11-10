@@ -360,3 +360,6 @@
 
 /* Просмотр проекта в личном кабинете. */
 .wp-ntk .wp-ntk-project-view { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid var(--wp-ntk-border); border-radius: var(--wp-ntk-radius); overflow-wrap: anywhere; scroll-margin-top: 5rem; }
+
+/* Переход к основной странице сайта. */
+.wp-ntk .wp-ntk-home { margin: 0 0 1.25rem; }
