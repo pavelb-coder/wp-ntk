@@ -33,6 +33,7 @@ final class WP_NTK_Projects {
   $now = time();
   return array( 'state' => $now < $start->getTimestamp() ? 'before' : ( $now >= $end->getTimestamp() ? 'after' : 'open' ), 'start' => $start, 'end' => $end );
  }
+ private function can_register() { return is_user_logged_in() && ( WP_NTK_Setup::is_mentor( wp_get_current_user() ) || current_user_can( 'manage_options' ) ); }
  private function post_value( $name ) { return isset( $_POST[ $name ] ) && is_string( $_POST[ $name ] ) ? wp_unslash( $_POST[ $name ] ) : ''; }
  private function page_url() { return get_permalink( get_queried_object_id() ); }
  public function menu() { add_submenu_page( 'wp-ntk', 'Проекты', 'Проекты', 'manage_options', 'wp-ntk-projects', array( $this, 'admin_page' ) ); }
@@ -77,7 +78,7 @@ final class WP_NTK_Projects {
   if ( 'save' !== $this->post_value( 'wp_ntk_project_action' ) ) { return; }
   if ( ! is_singular() || ! has_shortcode( get_post_field( 'post_content', get_queried_object_id() ), WP_NTK_Setup::SHORTCODE ) ) { return; }
   nocache_headers();
-  if ( ! is_user_logged_in() || ! WP_NTK_Setup::is_mentor( wp_get_current_user() ) ) { wp_die( 'Регистрация проекта доступна только наставнику.', '', array( 'response' => 403 ) ); }
+  if ( ! $this->can_register() ) { wp_die( 'Регистрация проекта доступна наставнику или администратору.', '', array( 'response' => 403 ) ); }
   $id = absint( $this->post_value( 'wp_ntk_project_id' ) );
   $this->values = array( 'id' => $id, 'title' => sanitize_text_field( $this->post_value( 'wp_ntk_project_title' ) ), 'description' => sanitize_textarea_field( $this->post_value( 'wp_ntk_project_description' ) ), 'nomination' => $this->post_value( 'wp_ntk_project_nomination' ) );
   if ( ! wp_verify_nonce( $this->post_value( 'wp_ntk_project_nonce' ), 'wp_ntk_project_save' ) ) { $this->errors[] = 'Срок действия формы истёк. Обновите страницу и попробуйте снова.'; return; }
@@ -96,11 +97,12 @@ final class WP_NTK_Projects {
   wp_safe_redirect( add_query_arg( 'ntk_project_saved', '1', $this->page_url() ) . '#wp-ntk-projects' ); exit;
  }
  public function render() {
-  if ( ! WP_NTK_Setup::is_mentor( wp_get_current_user() ) ) { return; }
+  if ( ! $this->can_register() ) { return; }
   $period = $this->period(); $c = $this->settings(); $url = $this->page_url();
   $paged = isset( $_GET['ntk_projects_page'] ) ? max( 1, absint( $_GET['ntk_projects_page'] ) ) : 1;
   $q = new WP_Query( array( 'post_type' => self::TYPE, 'post_status' => 'private', 'author' => get_current_user_id(), 'posts_per_page' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC' ) );
   echo '<section id="wp-ntk-projects"><h2 class="wp-ntk-title">Мои проекты</h2>';
+  if ( current_user_can( 'manage_options' ) && ! WP_NTK_Setup::is_mentor( wp_get_current_user() ) ) { echo '<p>Проекты, созданные здесь, будут зарегистрированы на учётную запись администратора.</p>'; }
   if ( isset( $_GET['ntk_project_saved'] ) ) { echo '<div class="wp-ntk-notice wp-ntk-notice--success">Проект сохранён.</div>'; }
   if ( 'unset' === $period['state'] ) { echo '<p>Период регистрации проектов ещё не настроен.</p>'; }
   else {
@@ -109,6 +111,7 @@ final class WP_NTK_Projects {
    elseif ( 'before' === $period['state'] ) { echo '<p>Приём ещё не начался.</p>'; } else { echo '<p>Приём завершён.</p>'; }
   }
   if ( 'open' === $period['state'] ) { echo '<p><a class="wp-ntk-button" href="' . esc_url( add_query_arg( 'ntk_project_form', 'new', $url ) . '#wp-ntk-project-form' ) . '">Зарегистрировать проект</a></p>'; }
+  else { echo '<p><button class="wp-ntk-button wp-ntk-button--disabled" type="button" disabled>Зарегистрировать проект</button></p>'; if ( current_user_can( 'manage_options' ) ) { echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=wp-ntk-projects' ) ) . '">Настроить период приёма</a></p>'; } }
   if ( $q->posts ) {
    echo '<ul>'; foreach ( $q->posts as $p ) { $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); echo '<li><strong>' . esc_html( $p->post_title ) . '</strong> — ' . esc_html( isset( $c['nominations'][$nom] ) ? $c['nominations'][$nom] : 'Номинация не указана' ); if ( 'open' === $period['state'] ) { echo ' — <a href="' . esc_url( add_query_arg( 'ntk_project_form', $p->ID, $url ) . '#wp-ntk-project-form' ) . '">Изменить</a>'; } echo '</li>'; } echo '</ul>';
    if ( $q->max_num_pages > 1 ) { echo wp_kses_post( paginate_links( array( 'base' => add_query_arg( 'ntk_projects_page', '%#%', $url ) . '#wp-ntk-projects', 'format' => '', 'current' => $paged, 'total' => $q->max_num_pages ) ) ); }

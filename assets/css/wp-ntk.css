@@ -348,3 +348,6 @@
 
 /* Флажки дополнительных полей не растягиваются на ширину текстового поля. */
 .wp-ntk input[type="checkbox"].wp-ntk-input { width: auto; min-height: 0; }
+
+/* Кнопка видна и при закрытом приёме, но недоступна. */
+.wp-ntk .wp-ntk-button--disabled { opacity: 0.55; cursor: not-allowed; }
