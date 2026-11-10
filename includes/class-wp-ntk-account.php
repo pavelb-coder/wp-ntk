@@ -365,7 +365,9 @@ final class WP_NTK_Account {
 
 		ob_start();
 		echo '<div class="wp-ntk" id="' . esc_attr( self::ANCHOR ) . '">';
-		echo '<p class="wp-ntk-home"><a class="wp-ntk-button wp-ntk-button--secondary" href="' . esc_url( home_url( '/' ) ) . '">' . esc_html__( 'На главную', 'wp-ntk' ) . '</a></p>';
+		if ( ! is_user_logged_in() ) {
+			echo '<p class="wp-ntk-home"><a class="wp-ntk-button wp-ntk-button--secondary" href="' . esc_url( home_url( '/' ) ) . '">' . esc_html__( 'На главную', 'wp-ntk' ) . '</a></p>';
+		}
 		$this->render_notice( array( 'registered', 'logged_out' ) );
 
 		if ( is_user_logged_in() ) {
@@ -591,7 +593,10 @@ final class WP_NTK_Account {
 				<strong class="wp-ntk-user-name"><?php echo esc_html( $name ); ?></strong>
 				<span class="wp-ntk-user-email"><?php echo esc_html( $user->user_email ); ?></span>
 			</p>
-			<a class="wp-ntk-button wp-ntk-button--secondary" href="<?php echo esc_url( $logout ); ?>"><?php esc_html_e( 'Выйти', 'wp-ntk' ); ?></a>
+			<div class="wp-ntk-head-actions">
+				<a class="wp-ntk-button wp-ntk-button--secondary" href="<?php echo esc_url( home_url( '/' ) ); ?>"><?php esc_html_e( 'На главную', 'wp-ntk' ); ?></a>
+				<a class="wp-ntk-button wp-ntk-button--secondary" href="<?php echo esc_url( $logout ); ?>"><?php esc_html_e( 'Выйти', 'wp-ntk' ); ?></a>
+			</div>
 		</div>
 		<?php
 	}

@@ -363,3 +363,6 @@
 
 /* Переход к основной странице сайта. */
 .wp-ntk .wp-ntk-home { margin: 0 0 1.25rem; }
+
+/* Кнопки шапки располагаются рядом и переносятся при нехватке места. */
+.wp-ntk .wp-ntk-head-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
