@@ -113,6 +113,12 @@ final class WP_NTK_Projects {
   </div><?php
  }
  public function handle() {
+  // PHP очищает POST и FILES целиком, если запрос превышает post_max_size.
+  if ( 'POST' === $_SERVER['REQUEST_METHOD'] && empty( $_POST ) && empty( $_FILES ) && ! empty( $_SERVER['CONTENT_LENGTH'] ) && is_singular() && has_shortcode( get_post_field( 'post_content', get_queried_object_id() ), WP_NTK_Setup::SHORTCODE ) && isset( $_GET['ntk_project_form'] ) ) {
+   $limit = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
+   if ( $limit > 0 && (int) $_SERVER['CONTENT_LENGTH'] > $limit ) { $this->errors[] = 'Общий размер отправленных файлов превышает ограничение сервера. Уменьшите размер файлов или обратитесь к администратору.'; }
+   return;
+  }
   if ( 'save' !== $this->post_value( 'wp_ntk_project_action' ) ) { return; }
   if ( ! is_singular() || ! has_shortcode( get_post_field( 'post_content', get_queried_object_id() ), WP_NTK_Setup::SHORTCODE ) ) { return; }
   nocache_headers();
@@ -181,7 +187,7 @@ final class WP_NTK_Projects {
   if ( ! $v && 'new' === $form ) { $v = array( 'id' => 0, 'title' => '', 'description' => '', 'nomination' => '' ); }
   elseif ( ! $v && ctype_digit( $form ) ) { $p = get_post( (int) $form ); if ( $p && self::TYPE === $p->post_type && 'private' === $p->post_status && (int) $p->post_author === get_current_user_id() ) { $v = array( 'id' => $p->ID, 'title' => $p->post_title, 'description' => $p->post_content, 'nomination' => (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ) ); } }
   if ( $v && 'open' === $period['state'] ) {
-   echo '<h3>' . ( $v['id'] ? 'Изменить проект' : 'Регистрация проекта' ) . '</h3><form class="wp-ntk-form" id="wp-ntk-project-form" method="post" enctype="multipart/form-data" action="' . esc_url( $url . '#wp-ntk-projects' ) . '">';
+   echo '<h3>' . ( $v['id'] ? 'Изменить проект' : 'Регистрация проекта' ) . '</h3><form class="wp-ntk-form" id="wp-ntk-project-form" method="post" enctype="multipart/form-data" action="' . esc_url( add_query_arg( 'ntk_project_form', $v['id'] ? $v['id'] : 'new', $url ) . '#wp-ntk-projects' ) . '">';
    echo '<input type="hidden" name="wp_ntk_project_action" value="save"><input type="hidden" name="wp_ntk_project_id" value="' . (int) $v['id'] . '">'; wp_nonce_field( 'wp_ntk_project_save', 'wp_ntk_project_nonce' );
    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-nomination">Номинация *</label><select class="wp-ntk-input" id="ntk-project-nomination" name="wp_ntk_project_nomination" required><option value="">Выберите номинацию</option>';
    foreach ( $c['nominations'] as $id => $name ) { echo '<option value="' . esc_attr( $id ) . '" ' . selected( (string) $id, $v['nomination'], false ) . '>' . esc_html( $name ) . '</option>'; }

@@ -20,7 +20,7 @@ final class WP_NTK_Project_Files {
   $doc = isset( $_SERVER['DOCUMENT_ROOT'] ) && is_string( $_SERVER['DOCUMENT_ROOT'] ) ? realpath( $_SERVER['DOCUMENT_ROOT'] ) : false;
   if ( ! $root || ! $doc || ! is_dir( $root ) || ! is_writable( $root ) ) { return false; }
   foreach ( array( $doc, realpath( ABSPATH ), realpath( WP_CONTENT_DIR ) ) as $public ) {
-   if ( $public && ( $root === $public || 0 === strpos( $root . DIRECTORY_SEPARATOR, rtrim( $public, DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR ) ) ) { return false; }
+   if ( $public && ( $root === $public || 0 === strpos( $root . DIRECTORY_SEPARATOR, rtrim( $public, DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR ) || 0 === strpos( $public . DIRECTORY_SEPARATOR, rtrim( $root, DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR ) ) ) { return false; }
   }
   return $root;
  }
@@ -78,7 +78,7 @@ final class WP_NTK_Project_Files {
  }
  private static function remove_blob( $blob ) {
   $root = self::root(); if ( ! $root || ! is_string( $blob ) || ! preg_match( '/^[a-f0-9]{40}\.bin$/D', $blob ) ) { return; }
-  $path = $root . DIRECTORY_SEPARATOR . $blob; if ( is_file( $path ) && ! is_link( $path ) ) { @unlink( $path ); }
+  $path = $root . DIRECTORY_SEPARATOR . $blob; if ( is_file( $path ) && ! is_link( $path ) && ! @unlink( $path ) ) { error_log( 'WP NTK: не удалось удалить файл проекта из закрытого хранилища: ' . $blob ); }
  }
  public static function rollback( $new ) { foreach ( $new as $blob ) { self::remove_blob( $blob ); } }
  /** Проверяет и переносит загруженные файлы; при ошибке удаляет все новые файлы. */
@@ -89,7 +89,7 @@ final class WP_NTK_Project_Files {
    $u = isset( $_FILES['wp_ntk_attachment'] ) && is_array( $_FILES['wp_ntk_attachment'] ) ? $_FILES['wp_ntk_attachment'] : array();
    $err = isset( $u['error'][$key] ) && is_int( $u['error'][$key] ) ? $u['error'][$key] : UPLOAD_ERR_NO_FILE;
    $remove = isset( $_POST['wp_ntk_remove_file'][$key] ) && '1' === $_POST['wp_ntk_remove_file'][$key];
-   if ( UPLOAD_ERR_NO_FILE === $err ) { if ( $remove && isset( $files[$key] ) ) { $retired[] = $files[$key]['blob']; unset( $files[$key] ); } }
+   if ( UPLOAD_ERR_NO_FILE === $err ) { if ( $remove && isset( $files[$key] ) ) { if ( ! self::root() ) { $errors[] = 'Закрытая папка для файлов недоступна. Обратитесь к администратору.'; } else { $retired[] = $files[$key]['blob']; unset( $files[$key] ); } } }
    elseif ( UPLOAD_ERR_OK !== $err ) { $errors[] = 'Ошибка загрузки файла: ' . $section['name'] . '.'; }
    else {
     $root = self::root(); $name = isset( $u['name'][$key] ) && is_string( $u['name'][$key] ) ? sanitize_file_name( wp_unslash( $u['name'][$key] ) ) : '';
