@@ -172,12 +172,11 @@ final class WP_NTK_Project_Export {
      $uploads[$remote] = $path; $list[] = array( 'раздел' => WP_NTK_Project_Files::section_label( $key, $f ), 'имя_оригинала' => isset( $f['name'] ) ? $f['name'] : '', 'имя_в_папке' => $remote );
     }
     $author = get_userdata( $p->post_author );
-    $info = array( 'id_проекта' => $p->ID, 'номинация' => isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom, 'номер_номинации' => $nom, 'название' => $p->post_title, 'описание' => $p->post_content, 'id_автора' => (int) $p->post_author, 'автор' => $author ? $author->display_name : '', 'email_аккаунта' => $author ? $author->user_email : '', 'дата_создания' => $p->post_date, 'файлы' => $list );
     $project_rows = array(
-     array( 'ID проекта', (string) $p->ID ), array( 'Название проекта', $p->post_title ),
-     array( 'Номинация', $info['номинация'] ), array( 'Номер номинации', $nom ), array( 'Описание проекта', $p->post_content ),
-     array( 'Дата создания', $p->post_date ), array( 'ID наставника', (string) $p->post_author ),
-     array( 'Наставник', $author ? $author->display_name : 'Учётная запись недоступна' ), array( 'Email аккаунта', $author ? $author->user_email : '' )
+     array( 'Название проекта', $p->post_title ),
+     array( 'Номинация', isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom ),
+     array( 'Номер номинации', $nom ), array( 'Описание проекта', $p->post_content ),
+     array( 'Дата создания', $p->post_date )
     );
     if ( $list ) { foreach ( $list as $item ) { $project_rows[] = array( 'Вложение: ' . $item['раздел'], $item['имя_оригинала'] . ' (в папке: ' . $item['имя_в_папке'] . ')' ); } }
     else { $project_rows[] = array( 'Вложения', 'Нет' ); }
