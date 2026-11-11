@@ -160,9 +160,9 @@ final class WP_NTK_Project_Export {
     $files = WP_NTK_Project_Files::files( $p->ID ); ksort( $files ); $list = array(); $uploads = array();
     $doc_stem = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
     $xlsx_name = $doc_stem . '.xlsx'; $pdf_name = $doc_stem . '.pdf';
-    // При названии mentor резервируем имя анкеты и добавляем суффикс документу проекта.
-    if ( $this->fold( $xlsx_name ) === $this->fold( 'mentor.xlsx' ) ) { $xlsx_name = $doc_stem . ' (проект).xlsx'; }
-    $used_names = array( $this->fold( $xlsx_name ) => true, $this->fold( $pdf_name ) => true, $this->fold( 'mentor.xlsx' ) => true );
+    // При названии «наставник» резервируем имя анкеты и добавляем суффикс документу проекта.
+    if ( $this->fold( $xlsx_name ) === $this->fold( 'наставник.xlsx' ) ) { $xlsx_name = $doc_stem . ' (проект).xlsx'; }
+    $used_names = array( $this->fold( $xlsx_name ) => true, $this->fold( $pdf_name ) => true, $this->fold( 'наставник.xlsx' ) => true );
     foreach ( $files as $key => $f ) {
      if ( ! preg_match( '/^f_[a-f0-9]{12}$/D', $key ) || empty( $f['blob'] ) || ! preg_match( '/^[a-f0-9]{40}\\.bin$/D', $f['blob'] ) || empty( $f['ext'] ) || ! isset( WP_NTK_Project_Files::TYPES[$f['ext']] ) ) { throw new RuntimeException( 'Файл проекта или закрытое хранилище недоступны.' ); }
      $temporary = false; $path = WP_NTK_Project_Files::local_copy( $f, $temporary );
@@ -183,11 +183,11 @@ final class WP_NTK_Project_Export {
     $mentor_rows = array( array( 'ID наставника', (string) $p->post_author ), array( 'Имя пользователя', $author ? $author->display_name : 'Учётная запись недоступна' ), array( 'Email аккаунта', $author ? $author->user_email : '' ), array( 'Дата регистрации', $author ? $author->user_registered : '' ) );
     $field_defs = WP_NTK_Fields::all(); $values = $author ? WP_NTK_Fields::get_values( $p->post_author ) : array();
     foreach ( $field_defs as $field_key => $field ) { $mentor_rows[] = array( $field['label'], isset( $values[$field_key] ) ? $values[$field_key] : '' ); }
-    foreach ( array( $xlsx_name, $pdf_name, 'mentor.xlsx' ) as $doc_name ) {
+    foreach ( array( $xlsx_name, $pdf_name, 'наставник.xlsx' ) as $doc_name ) {
      $doc = WP_NTK_Project_Files::create_temp_file(); if ( ! $doc ) { throw new RuntimeException( 'Закрытый временный каталог PHP недоступен или расположен в публичной области сайта.' ); }
      $documents[] = $doc;
      if ( $pdf_name === $doc_name ) { WP_NTK_Export_Documents::pdf( $doc, $project_rows ); }
-     else { WP_NTK_Export_Documents::xlsx( $doc, 'mentor.xlsx' === $doc_name ? $mentor_rows : $project_rows, 'mentor.xlsx' === $doc_name ? 'Наставник' : 'Проект' ); }
+     else { WP_NTK_Export_Documents::xlsx( $doc, 'наставник.xlsx' === $doc_name ? $mentor_rows : $project_rows, 'наставник.xlsx' === $doc_name ? 'Наставник' : 'Проект' ); }
      $uploads[$doc_name] = $doc;
     }
     foreach ( $uploads as $name => $local ) {
