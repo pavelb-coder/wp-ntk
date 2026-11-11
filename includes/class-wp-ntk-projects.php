@@ -59,6 +59,7 @@ final class WP_NTK_Projects {
    if ( ! $a || ! $b || $a >= $b ) { wp_die( 'Укажите корректные дату и время начала и окончания. Окончание должно быть позже начала.' ); }
   }
   update_option( self::OPTION, array( 'nominations' => $names, 'start' => $start, 'end' => $end ), false );
+  do_action( 'wp_ntk_project_changed' );
   wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&saved=1' ) ); exit;
  }
  /** Перемещение проекта в корзину и восстановление доступны только администраторам. */
@@ -83,6 +84,7 @@ final class WP_NTK_Projects {
    remove_filter( 'wp_untrash_post_status', $restore_private, 10 );
   }
   if ( ! $result || is_wp_error( $result ) ) { wp_die( 'Не удалось изменить состояние проекта. Попробуйте ещё раз.' ); }
+  do_action( 'wp_ntk_project_changed' );
   wp_safe_redirect( add_query_arg( array( 'page' => 'wp-ntk-projects', 'view' => 'trash' === $operation ? 'active' : 'trash', 'project_result' => 'trash' === $operation ? 'trashed' : 'restored' ), admin_url( 'admin.php' ) ) . '#wp-ntk-admin-projects' ); exit;
  }
  public function admin_page() {
@@ -146,6 +148,7 @@ final class WP_NTK_Projects {
    $this->errors[] = 'Не удалось сохранить данные файлов. Попробуйте ещё раз.'; return;
   }
   update_post_meta( $saved, '_wp_ntk_nomination', $v['nomination'] );
+  do_action( 'wp_ntk_project_changed' );
   wp_safe_redirect( add_query_arg( array( 'wp_ntk_tab' => 'projects', 'ntk_project_saved' => '1' ), $this->page_url() ) . '#wp-ntk-projects' ); exit;
  }
  public function render() {

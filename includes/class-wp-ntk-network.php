@@ -110,6 +110,31 @@ final class WP_NTK_Network {
   $this->status( $ok ? 'Выгрузка mentors.csv завершена.' : 'Выгрузка не выполнена. Проверьте подключение и права записи.' );
   return $ok;
  }
+ /** Операция в выделенной подпапке проектов; команды и имена формируются самим плагином. */
+ public function project_command( $dirs, $command, $probe = false ) {
+  $c = $this->config(); $parsed = $this->parse_path( isset( $c['path'] ) ? $c['path'] : '' );
+  $password = $this->decrypt( isset( $c['secret'] ) ? $c['secret'] : '' );
+  if ( ! $parsed || false === $password || empty( $c['user'] ) || ! function_exists( 'proc_open' ) || ! is_array( $dirs ) || ! is_string( $command ) || preg_match( '/[\r\n;]/', $command ) ) { return false; }
+  foreach ( $dirs as $dir ) { if ( ! is_string( $dir ) || ! preg_match( '/^[A-Za-z0-9_.-]{1,100}$/D', $dir ) || '.' === $dir || '..' === $dir ) { return false; } }
+  $binary = ''; foreach ( array( '/usr/bin/smbclient', '/usr/local/bin/smbclient', '/bin/smbclient' ) as $candidate ) { if ( is_executable( $candidate ) ) { $binary = $candidate; break; } }
+  if ( ! $binary ) { return false; }
+  $auth = tempnam( sys_get_temp_dir(), 'ntkauth_' ); if ( false === $auth ) { return false; }
+  try {
+   if ( ! chmod( $auth, 0600 ) ) { return false; }
+   $contents = 'username = ' . $c['user'] . "\npassword = " . $password . "\n" . ( empty( $c['domain'] ) ? '' : 'domain = ' . $c['domain'] . "\n" );
+   if ( false === file_put_contents( $auth, $contents, LOCK_EX ) ) { return false; }
+   $args = array( $binary, $parsed['service'], '-A', $auth, '-m', 'SMB3', '--client-protection=encrypt', '-t', '20' );
+   $all_dirs = array_merge( $parsed['dirs'], $dirs ); if ( $all_dirs ) { $args[] = '-D'; $args[] = implode( '\\', $all_dirs ); }
+   $args[] = '-c'; $args[] = $command;
+   $proc = proc_open( $args, array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes ); if ( ! is_resource( $proc ) ) { return false; }
+   fclose( $pipes[0] ); stream_set_blocking( $pipes[1], false ); stream_set_blocking( $pipes[2], false ); $output = ''; $deadline = microtime( true ) + 60; $exit = -1;
+   do { $output .= stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] ); $state = proc_get_status( $proc ); if ( ! $state['running'] ) { $exit = $state['exitcode']; break; } if ( microtime( true ) > $deadline ) { proc_terminate( $proc, 9 ); break; } usleep( 100000 ); } while ( true );
+   $output .= stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] ); fclose( $pipes[1] ); fclose( $pipes[2] ); proc_close( $proc );
+   if ( $probe ) { if ( 0 === $exit && ! preg_match( '/NT_STATUS_|ERRDOS|ERRSRV|failed|error|timed out/i', $output ) ) { return 'exists'; } if ( preg_match( '/NT_STATUS_(?:NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)/', $output ) && ! preg_match( '/NT_STATUS_(?!NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)[A-Z_]+|ERRDOS|ERRSRV|timed out/i', $output ) ) { return 'missing'; } return 'unknown'; }
+   if ( 0 === strpos( $command, 'del ' ) && preg_match( '/NT_STATUS_(?:NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)/', $output ) && ! preg_match( '/NT_STATUS_(?!NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)[A-Z_]+|ERRDOS|ERRSRV|timed out/i', $output ) ) { return true; }
+   return 0 === $exit && ! preg_match( '/NT_STATUS_|ERRDOS|ERRSRV|failed|error|timed out/i', $output );
+  } finally { @unlink( $auth ); }
+ }
  /** Запускает smbclient без оболочки и без пароля в аргументах процесса. */
  private function send( $file ) {
   $c = $this->config(); $parsed = $this->parse_path( isset( $c['path'] ) ? $c['path'] : '' );
