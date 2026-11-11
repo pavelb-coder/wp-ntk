@@ -80,8 +80,8 @@ final class WP_NTK_Project_Export {
  /** Названия безопасны для Windows и команд smbclient; длина ограничена байтами UTF-8. */
  private function nomination_dirs( $names ) {
   $result = array(); $used = array();
-  for ( $i = 1; $i <= 4; ++$i ) {
-   $name = isset( $names[(string) $i] ) && is_string( $names[(string) $i] ) ? $names[(string) $i] : 'Номинация ' . $i;
+  foreach ( $names as $i => $name ) {
+   if ( ! ctype_digit( (string) $i ) || (int) $i < 1 || ! is_string( $name ) ) { throw new RuntimeException( 'Некорректные настройки номинации.' ); }
    $name = preg_replace( '/[\x00-\x1f\x7f\\\\\/:*?"<>|;]/u', '_', $name );
    if ( ! is_string( $name ) ) { throw new RuntimeException( 'Некорректная кодировка названия номинации.' ); }
    $name = trim( $name, " .\t\r\n" );
@@ -120,7 +120,7 @@ final class WP_NTK_Project_Export {
   $used = array(); $out = array();
   foreach ( $projects as $p ) {
    $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true );
-   if ( ! in_array( $nom, array( '1', '2', '3', '4' ), true ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' некорректная номинация.' ); }
+   if ( ! ctype_digit( $nom ) || (int) $nom < 1 ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' некорректная номинация.' ); }
    $title = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
    $candidate = $title; $n = 0;
    while ( isset( $used[$nom][$this->fold( $candidate )] ) ) { $candidate = $title . ' (ID ' . (int) $p->ID . ( $n ? '-' . $n : '' ) . ')'; ++$n; }
@@ -150,11 +150,11 @@ final class WP_NTK_Project_Export {
    $all = get_option( self::MANIFEST, array() ); if ( ! is_array( $all ) ) { $all = array(); } if ( ! isset( $all[$target] ) || ! is_array( $all[$target] ) ) { $all[$target] = array(); }
    $wanted = array(); $old_base = array( 'wp-ntk-projects', 'site-' . (int) get_current_blog_id() );
    $projects = get_posts( array( 'post_type' => WP_NTK_Projects::TYPE, 'post_status' => 'private', 'numberposts' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'suppress_filters' => true ) );
-   $conf = get_option( WP_NTK_Projects::OPTION, array() ); $names = isset( $conf['nominations'] ) && is_array( $conf['nominations'] ) ? $conf['nominations'] : array(); $nomination_dirs = $this->nomination_dirs( $names );
-   foreach ( $nomination_dirs as $dir ) { if ( ! $this->ensure_dirs( array( $dir ) ) ) { throw new RuntimeException( 'Не удалось создать папку номинации. Проверьте подключение и права.' ); } }
+   $conf = get_option( WP_NTK_Projects::OPTION, array() ); $active_names = isset( $conf['nominations'] ) && is_array( $conf['nominations'] ) ? $conf['nominations'] : array( 1 => 'Номинация 1', 2 => 'Номинация 2', 3 => 'Номинация 3', 4 => 'Номинация 4' ); $names = array_replace( isset( $conf['retired_nominations'] ) && is_array( $conf['retired_nominations'] ) ? $conf['retired_nominations'] : array(), $active_names ); $nomination_dirs = $this->nomination_dirs( $names );
+   foreach ( $active_names as $active_id => $unused ) { $dir = $nomination_dirs[$active_id]; if ( ! $this->ensure_dirs( array( $dir ) ) ) { throw new RuntimeException( 'Не удалось создать папку номинации. Проверьте подключение и права.' ); } }
    $project_dirs = $this->project_dirs( $projects );
    foreach ( $projects as $p ) {
-    $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); if ( ! in_array( $nom, array( '1','2','3','4' ), true ) ) { throw new RuntimeException( 'У проекта некорректная номинация.' ); }
+    $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); if ( ! ctype_digit( $nom ) || ! isset( $nomination_dirs[$nom] ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' неизвестная номинация. Проверьте настройки.' ); }
     $dirs = array( $nomination_dirs[$nom], $project_dirs[(int) $p->ID] );
     if ( ! $this->ensure_dirs( $dirs ) ) { throw new RuntimeException( 'Не удалось создать папку проекта.' ); }
     $files = WP_NTK_Project_Files::files( $p->ID ); ksort( $files ); $list = array(); $uploads = array();
@@ -175,7 +175,6 @@ final class WP_NTK_Project_Export {
     $project_rows = array(
      array( 'Название проекта', $p->post_title ),
      array( 'Номинация', isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom ),
-     array( 'Описание проекта', $p->post_content ),
      array( 'Дата создания', $p->post_date )
     );
     $extra_fields = WP_NTK_Project_Fields::ordered(); $extra_values = WP_NTK_Project_Fields::values( $p->ID, $extra_fields );

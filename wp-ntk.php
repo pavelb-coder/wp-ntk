@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WP NTK
  * Description:       Личный кабинет наставника проекта с формой регистрации.
- * Version:           10.1.0
+ * Version:           11.0.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Text Domain:       wp-ntk
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Версия плагина в формате x.y.z. Должна совпадать с полем Version в заголовке
 // и со Stable tag в readme.txt.
-define( 'WP_NTK_VERSION', '10.1.0' );
+define( 'WP_NTK_VERSION', '11.0.0' );
 
 define( 'WP_NTK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WP_NTK_URL', plugin_dir_url( __FILE__ ) );
@@ -72,3 +72,6 @@ function wp_ntk_init() {
 	}
 }
 add_action( 'plugins_loaded', 'wp_ntk_init' );
+
+/** Панель WordPress видна только пользователям с правами администратора. */
+add_filter( 'show_admin_bar', function( $show ) { $user = wp_get_current_user(); $admin = in_array( 'administrator', (array) $user->roles, true ) || ( is_multisite() && is_user_logged_in() && is_super_admin() ); return $admin ? $show : false; }, PHP_INT_MAX );
