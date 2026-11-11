@@ -4,6 +4,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 final class WP_NTK_Project_Files {
  const OPTION = 'wp_ntk_project_file_sections';
  const META = '_wp_ntk_project_files';
+ const ARCHIVE_META = '_wp_ntk_unavailable_file_history';
  const DELETED_LABELS = 'wp_ntk_deleted_file_section_labels';
  const TYPES = array( 'pdf' => 'PDF', 'docx' => 'DOCX', 'xlsx' => 'XLSX', 'pptx' => 'PPTX', 'jpg' => 'JPG', 'png' => 'PNG' );
  public function hooks() {
@@ -136,6 +137,8 @@ final class WP_NTK_Project_Files {
   if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) { return ! empty( $f['target'] ) && self::target() === $f['target'] && self::smb_ready(); }
   return (bool) self::root();
  }
+ public static function is_storage_ready( $f ) { return self::storage_ready( $f ); }
+ public static function archives( $id ) { $rows = get_post_meta( $id, self::ARCHIVE_META, false ); return is_array( $rows ) ? $rows : array(); }
  private static function remove_blob( $f ) {
   if ( ! is_array( $f ) || empty( $f['blob'] ) || ! self::valid_blob( $f['blob'] ) ) { return false; }
   if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) {
@@ -178,7 +181,7 @@ final class WP_NTK_Project_Files {
  }
  /** Проверяет и переносит загруженные файлы; при ошибке удаляет все новые файлы. */
  public static function prepare( $id ) {
-  $current = self::files( $id ); $files = $current; $new = array(); $retired = array(); $errors = array(); $sections = self::sections();
+  $current = self::files( $id ); $files = $current; $new = array(); $retired = array(); $archives = array(); $errors = array(); $sections = self::sections();
   foreach ( $sections as $key => $section ) {
    if ( empty( $section['active'] ) ) { continue; }
    $u = isset( $_FILES['wp_ntk_attachment'] ) && is_array( $_FILES['wp_ntk_attachment'] ) ? $_FILES['wp_ntk_attachment'] : array();
@@ -194,7 +197,11 @@ final class WP_NTK_Project_Files {
     $tmp = isset( $u['tmp_name'][$key] ) && is_string( $u['tmp_name'][$key] ) ? $u['tmp_name'][$key] : '';
     $size = $tmp && is_uploaded_file( $tmp ) ? filesize( $tmp ) : false;
     $ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ); if ( 'jpeg' === $ext ) { $ext = 'jpg'; }
-    if ( isset( $files[$key] ) && ! self::storage_ready( $files[$key] ) ) { $errors[] = 'Хранилище прежнего файла недоступно. Обратитесь к администратору.'; }
+    $old_unavailable = isset( $files[$key] ) && ! self::storage_ready( $files[$key] );
+    $confirmation = isset( $_POST['wp_ntk_replace_unavailable'][$key] ) && is_string( $_POST['wp_ntk_replace_unavailable'][$key] ) ? wp_unslash( $_POST['wp_ntk_replace_unavailable'][$key] ) : '';
+    $confirm = '' !== $confirmation && isset( $files[$key]['blob'] ) && $confirmation === $files[$key]['blob'];
+    if ( '' !== $confirmation && ! $confirm ) { $errors[] = 'Прежний файл изменился. Обновите страницу и подтвердите замену заново.'; }
+    elseif ( $old_unavailable && ! $confirm ) { $errors[] = 'Хранилище прежнего файла недоступно. Чтобы заменить файл в разделе «' . $section['name'] . '», подтвердите замену и снова выберите новый файл.'; }
     elseif ( ! $size || $size > (int) $section['max'] * 1048576 || $size > wp_max_upload_size() ) { $errors[] = 'Файл раздела «' . $section['name'] . '» пуст или превышает разрешённый размер.'; }
     elseif ( ! in_array( $ext, $section['types'], true ) || ! self::valid_file( $tmp, $ext ) ) { $errors[] = 'Недопустимый формат файла в разделе «' . $section['name'] . '». Разрешены: ' . strtoupper( implode( ', ', $section['types'] ) ) . '. Проверьте расширение и содержимое файла.'; }
     else {
@@ -205,18 +212,41 @@ final class WP_NTK_Project_Files {
      else {
       $new[] = $record;
       if ( ! $net->project_command( $dirs, 'put "' . $tmp . '" "' . $blob . '"', false, $record['target'] ) ) { $errors[] = 'Не удалось передать файл раздела «' . $section['name'] . '» в сетевую папку.'; }
-      else { if ( isset( $files[$key]['blob'] ) ) { $retired[] = $files[$key]; } $files[$key] = $record; }
+      else {
+       if ( isset( $files[$key]['blob'] ) ) {
+        if ( $confirm ) { $archives[] = array( 'id' => wp_generate_uuid4(), 'section_key' => $key, 'section' => self::section_label( $key, $files[$key] ), 'archived_at' => gmdate( 'Y-m-d H:i:s' ), 'file' => $files[$key] ); }
+        else { $retired[] = $files[$key]; }
+       }
+       $files[$key] = $record;
+      }
      }
     }
    }
    if ( ! empty( $section['required'] ) && ! isset( $files[$key] ) ) { $errors[] = 'Прикрепите файл в разделе «' . $section['name'] . '».'; }
   }
   if ( $errors ) { self::rollback( $new ); return array( 'errors' => $errors ); }
-  return array( 'errors' => array(), 'files' => $files, 'new' => $new, 'retired' => $retired );
+  return array( 'errors' => array(), 'files' => $files, 'new' => $new, 'retired' => $retired, 'archives' => $archives, 'original' => $current );
  }
  public static function commit( $id, $prepared ) {
-  $expected = $prepared['files']; update_post_meta( $id, self::META, $expected );
-  if ( self::files( $id ) !== $expected ) { self::rollback( $prepared['new'] ); return false; }
+  $expected = $prepared['files']; $archive_ids = array();
+  if ( ! empty( $prepared['archives'] ) ) {
+   // До переключения на новый файл записываем информацию для восстановления прежнего.
+   foreach ( $prepared['archives'] as $entry ) {
+    $mid = add_post_meta( $id, self::ARCHIVE_META, wp_slash( $entry ) );
+    if ( ! $mid ) { foreach ( $archive_ids as $saved_mid ) { delete_metadata_by_mid( 'post', $saved_mid ); } self::rollback( $prepared['new'] ); return false; }
+    $archive_ids[] = $mid;
+   }
+   $updated = update_post_meta( $id, self::META, wp_slash( $expected ), $prepared['original'] );
+   $observed = self::files( $id );
+   if ( $observed !== $expected ) {
+    if ( false === $updated && $observed === $prepared['original'] ) { foreach ( $archive_ids as $saved_mid ) { delete_metadata_by_mid( 'post', $saved_mid ); } self::rollback( $prepared['new'] ); }
+    else { error_log( 'WP NTK: неоднозначное состояние при замене недоступного файла проекта ' . (int) $id . '; старые сведения и новые файлы сохранены для проверки.' ); }
+    return false;
+   }
+  } else {
+   update_post_meta( $id, self::META, wp_slash( $expected ) );
+   if ( self::files( $id ) !== $expected ) { self::rollback( $prepared['new'] ); return false; }
+  }
   foreach ( $prepared['retired'] as $f ) { if ( ! self::remove_blob( $f ) ) { error_log( 'WP NTK: не удалось удалить прежний файл проекта из хранилища.' ); } } return true;
  }
  public static function url( $id, $key ) { return wp_nonce_url( add_query_arg( array( 'action' => 'wp_ntk_project_download', 'project' => $id, 'section' => $key ), admin_url( 'admin-post.php' ) ), 'wp_ntk_file_' . $id . '_' . $key ); }
