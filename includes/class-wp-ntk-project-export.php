@@ -45,9 +45,9 @@ final class WP_NTK_Project_Export {
   $auto = empty( $_POST['auto'] ) ? 0 : 1; update_option( self::OPTION, array( 'auto' => $auto, 'interval' => $interval ), false );
   wp_clear_scheduled_hook( self::EVENT ); wp_clear_scheduled_hook( self::CHANGE );
   if ( $auto ) { wp_schedule_event( time() + 60, $interval, self::EVENT ); $this->schedule_change(); }
-  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files' ) . '#wp-ntk-export' ); exit;
+  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=files' ) . '#wp-ntk-export' ); exit;
  }
- public function manual() { $this->allowed(); check_admin_referer( 'wp_ntk_project_export_now' ); $this->export(); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files' ) . '#wp-ntk-export' ); exit; }
+ public function manual() { $this->allowed(); check_admin_referer( 'wp_ntk_project_export_now' ); $this->export(); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=files' ) . '#wp-ntk-export' ); exit; }
  public function schedule_change() { $c = $this->config(); if ( ! empty( $c['auto'] ) && ! wp_next_scheduled( self::CHANGE ) ) { wp_schedule_single_event( time() + 20, self::CHANGE ); } }
  /** Удаление вложения запускает синхронизацию независимо от флага автоэкспорта. */
  public function sync_deleted_file() {

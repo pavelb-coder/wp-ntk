@@ -43,7 +43,7 @@ final class WP_NTK_Panel {
   fputcsv( $out, $headers, ';' );
   $offset = 0;
   do {
-   $users = get_users( array( 'role' => WP_NTK_Setup::ROLE, 'number' => 200, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC' ) );
+   $users = get_users( array( 'role__in' => array( WP_NTK_Setup::ROLE, 'subscriber' ), 'number' => 200, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC' ) );
    foreach ( $users as $user ) {
     $row = array( $user->ID, $user->user_email, $user->user_registered );
     foreach ( WP_NTK_Fields::get_values( $user->ID ) as $value ) { $row[] = $value; }
@@ -59,7 +59,7 @@ final class WP_NTK_Panel {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Недостаточно прав.', 'wp-ntk' ) ); }
   $search = isset( $_GET['s'] ) && is_string( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
   $paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
-  $args = array( 'role' => WP_NTK_Setup::ROLE, 'number' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC', 'count_total' => true );
+  $args = array( 'role__in' => array( WP_NTK_Setup::ROLE, 'subscriber' ), 'number' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC', 'count_total' => true );
   if ( $search ) { $args['search'] = '*' . $search . '*'; $args['search_columns'] = array( 'user_login', 'user_email', 'display_name' ); }
   $query = new WP_User_Query( $args );
   $page_id = WP_NTK_Setup::account_page_id();
@@ -80,11 +80,11 @@ final class WP_NTK_Panel {
   <p><label for="wp-ntk-consent-url">Ссылка на документ (необязательно)</label><br><input id="wp-ntk-consent-url" name="wp_ntk_consent_url" class="regular-text" type="url" placeholder="https://example.org/document" value="<?php echo esc_attr( WP_NTK_Setup::consent_url() ); ?>"></p>
   <p class="description">Проверьте текст и документ с юристом. Согласие обязательно для новых регистраций. Существующие пользователи повторно не запрашиваются.</p>
   <?php submit_button(); ?></form>
-  <h2>Наставники</h2><p>Всего найдено: <?php echo (int) $query->get_total(); ?></p>
+  <h2>Наставники</h2><p>В список включены пользователи с ролью «Наставник проекта» или «Подписчик».</p><p>Всего найдено: <?php echo (int) $query->get_total(); ?></p>
   <form method="get"><input type="hidden" name="page" value="wp-ntk"><label for="wp-ntk-search">Поиск по имени, логину или email</label> <input id="wp-ntk-search" name="s" value="<?php echo esc_attr( $search ); ?>"> <button class="button">Найти</button></form>
   <p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wp_ntk_export' ), 'wp_ntk_export' ) ); ?>">Выгрузить всех наставников в CSV</a></p>
   <table class="widefat striped"><thead><tr><th>ФИО</th><th>Email аккаунта</th><th>Организация</th><th>Действие</th></tr></thead><tbody>
-  <?php foreach ( $query->get_results() as $user ) : $values = WP_NTK_Fields::get_values( $user->ID ); ?><tr><td><?php echo esc_html( $values['fio'] ); ?></td><td><?php echo esc_html( $user->user_email ); ?></td><td><?php echo esc_html( $values['organization'] ); ?></td><td><?php if ( current_user_can( 'edit_user', $user->ID ) ) : ?><a href="<?php echo esc_url( get_edit_user_link( $user->ID ) ); ?>">Изменить</a><?php endif; ?></td></tr><?php endforeach; ?>
+  <?php foreach ( $query->get_results() as $user ) : $values = WP_NTK_Fields::get_values( $user->ID ); ?><tr><td><?php echo esc_html( '' !== $values['fio'] ? $values['fio'] : $user->display_name ); ?></td><td><?php echo esc_html( $user->user_email ); ?></td><td><?php echo esc_html( $values['organization'] ); ?></td><td><?php if ( current_user_can( 'edit_user', $user->ID ) ) : ?><a href="<?php echo esc_url( get_edit_user_link( $user->ID ) ); ?>">Изменить</a><?php endif; ?></td></tr><?php endforeach; ?>
   <?php if ( ! $query->get_results() ) : ?><tr><td colspan="4">Наставников не найдено.</td></tr><?php endif; ?></tbody></table>
   <?php $pages = (int) ceil( $query->get_total() / 20 ); if ( $pages > 1 ) { echo '<div class="tablenav"><div class="tablenav-pages">' . wp_kses_post( paginate_links( array( 'base' => add_query_arg( 'paged', '%#%' ), 'format' => '', 'current' => $paged, 'total' => $pages ) ) ) . '</div></div>'; } ?>
   </div><?php

@@ -11,7 +11,7 @@ final class WP_NTK_Project_Fields {
   add_action( 'admin_post_wp_ntk_project_field_save', array( $this, 'save_field' ) );
   add_action( 'admin_post_wp_ntk_project_field_delete', array( $this, 'delete_field' ) );
  }
- public function menu() { add_submenu_page( 'wp-ntk', 'Поля проектов', 'Поля проектов', 'manage_options', 'wp-ntk-project-fields', array( $this, 'page' ) ); }
+ public function menu() { add_submenu_page( null, 'Поля проектов', 'Поля проектов', 'manage_options', 'wp-ntk-project-fields', array( $this, 'page' ) ); }
  private function allowed() { if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.', '', array( 'response' => 403 ) ); } }
  public static function all() { $v = get_option( self::OPTION, array() ); return is_array( $v ) ? $v : array(); }
  /** Единая блокировка записи ответов и изменения конфигурации предотвращает запись удалённого поля. */
@@ -44,7 +44,7 @@ final class WP_NTK_Project_Fields {
   $lock = self::lock(); if ( ! $lock ) { wp_die( 'Другая операция с полями уже выполняется. Повторите попытку.' ); }
   try { $saved = self::all() === $original; if ( $saved ) { update_option( self::OPTION, $all, false ); $saved = self::all() === $all; } } finally { self::unlock( $lock ); }
   if ( ! $saved ) { wp_die( 'Настройки полей изменились или не сохранились. Обновите страницу и попробуйте снова.' ); }
-  do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-fields&saved=1' ) ); exit;
+  do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=fields&saved=1' ) ); exit;
  }
  public function delete_field() {
   $this->allowed(); $key = $this->input( 'field_key' );
@@ -63,10 +63,10 @@ final class WP_NTK_Project_Fields {
    }
   } finally { self::unlock( $lock ); }
   if ( $error ) { wp_die( esc_html( $error ) ); }
-  do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-fields&deleted=1' ) ); exit;
+  do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=fields&deleted=1' ) ); exit;
  }
  public function page() {
-  $this->allowed(); $fields = self::ordered(); echo '<div class="wrap"><h1>Поля проектов</h1><p>Дополнительные поля отображаются после описания проекта. Настройки файловых разделов находятся отдельно в «Файлы проектов». Тип созданного поля изменить нельзя. При удалении поля все его ответы в проектах, включая корзину, будут удалены без возможности восстановления средствами плагина.</p>';
+  $this->allowed(); $fields = self::ordered(); echo '<div class="wrap"><h1>Поля проектов</h1><p>Дополнительные поля отображаются после описания проекта. Настройки файловых разделов находятся во вкладке «Файлы проектов». Тип созданного поля изменить нельзя. При удалении поля все его ответы в проектах, включая корзину, будут удалены без возможности восстановления средствами плагина.</p>';
   if ( isset( $_GET['saved'] ) ) { echo '<div class="notice notice-success"><p>Поле сохранено.</p></div>'; } if ( isset( $_GET['deleted'] ) ) { echo '<div class="notice notice-success"><p>Поле и его ответы удалены.</p></div>'; }
   foreach ( $fields as $key => $f ) {
    echo '<hr><h2>' . esc_html( $f['label'] ) . '</h2><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_field_save"><input type="hidden" name="field_key" value="' . esc_attr( $key ) . '">'; wp_nonce_field( 'wp_ntk_project_field_save' );

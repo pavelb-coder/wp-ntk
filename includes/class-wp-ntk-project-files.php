@@ -28,7 +28,7 @@ final class WP_NTK_Project_Files {
   }
   return $root;
  }
- public function menu() { add_submenu_page( 'wp-ntk', 'Файлы проектов', 'Файлы проектов', 'manage_options', 'wp-ntk-project-files', array( $this, 'page' ) ); }
+ public function menu() { add_submenu_page( null, 'Файлы проектов', 'Файлы проектов', 'manage_options', 'wp-ntk-project-files', array( $this, 'page' ) ); }
  private function allowed() { if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.', '', array( 'response' => 403 ) ); } }
  private function section_input( $row ) {
   if ( ! is_array( $row ) ) { wp_die( 'Некорректные настройки раздела.' ); }
@@ -49,7 +49,7 @@ final class WP_NTK_Project_Files {
    if ( isset( $out[$key] ) ) { wp_die( 'Не удалось создать раздел, попробуйте ещё раз.' ); }
    $out[$key] = $section;
   }
-  update_option( self::OPTION, $out, false ); do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files&saved=1' ) ); exit;
+  update_option( self::OPTION, $out, false ); do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=files&saved=1' ) ); exit;
  }
  /** Удаляется только настройка раздела; метаданные и ранее загруженные файлы остаются. */
  public function delete_section() {
@@ -64,7 +64,7 @@ final class WP_NTK_Project_Files {
   unset( $sections[$key] ); update_option( self::OPTION, $sections, false );
   if ( self::sections() !== $sections ) { wp_die( 'Не удалось удалить раздел. Попробуйте ещё раз.' ); }
   do_action( 'wp_ntk_project_changed' );
-  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files&section_deleted=1' ) ); exit;
+  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-projects&tab=files&section_deleted=1' ) ); exit;
  }
  private function row( $prefix, $section ) {
   echo '<p><label>Название <input class="regular-text" name="' . esc_attr( $prefix . '[name]' ) . '" maxlength="150" value="' . esc_attr( $section['name'] ) . '"></label> ';

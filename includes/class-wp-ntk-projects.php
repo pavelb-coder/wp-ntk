@@ -138,11 +138,21 @@ final class WP_NTK_Projects {
  }
  public function admin_page() {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.' ); }
+  $tab = isset( $_GET['tab'] ) && is_string( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'projects';
+  if ( ! in_array( $tab, array( 'projects', 'files', 'fields' ), true ) ) { $tab = 'projects'; }
+  echo '<div class="wrap"><h1>Проекты</h1><nav class="nav-tab-wrapper" aria-label="Разделы проектов">';
+  foreach ( array( 'projects' => 'Проекты и номинации', 'files' => 'Файлы проектов', 'fields' => 'Поля проектов' ) as $tab_id => $label ) {
+   $url = add_query_arg( array( 'page' => 'wp-ntk-projects', 'tab' => $tab_id ), admin_url( 'admin.php' ) );
+   echo '<a class="nav-tab' . ( $tab === $tab_id ? ' nav-tab-active' : '' ) . '" href="' . esc_url( $url ) . '"' . ( $tab === $tab_id ? ' aria-current="page"' : '' ) . '>' . esc_html( $label ) . '</a>';
+  }
+  echo '</nav></div>';
+  if ( 'files' === $tab ) { $page = new WP_NTK_Project_Files(); $page->page(); return; }
+  if ( 'fields' === $tab ) { $page = new WP_NTK_Project_Fields(); $page->page(); return; }
   $c = $this->settings(); $all_nominations = self::nomination_names( $c ); $paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
   $view = isset( $_GET['view'] ) && is_string( $_GET['view'] ) && 'trash' === sanitize_key( wp_unslash( $_GET['view'] ) ) ? 'trash' : 'active';
   $q = new WP_Query( array( 'post_type' => self::TYPE, 'post_status' => 'trash' === $view ? 'trash' : 'private', 'posts_per_page' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC' ) );
   ?>
-  <div class="wrap"><h1>Регистрация проектов</h1>
+  <div class="wrap"><h2>Регистрация проектов</h2>
   <?php if ( ! get_option( 'wp_ntk_descriptions_removed_v11' ) ) : ?><div class="notice notice-warning"><p>Удаление прежних описаний проектов и их ревизий выполняется пакетами. Необходимы посещения сайта или работающий WP-Cron; проверьте резервную копию базы.</p></div><?php endif; ?>
   <?php if ( isset( $_GET['saved'] ) ) : ?><div class="notice notice-success"><p>Настройки сохранены.</p></div><?php endif; ?>
   <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="wp_ntk_projects_settings"><?php wp_nonce_field( 'wp_ntk_projects_settings' ); ?>
