@@ -87,7 +87,7 @@ final class WP_NTK_Admin {
 		}
 
 		WP_NTK_Fields::save( $user_id, $values );
-		if ( WP_NTK_Setup::is_mentor( get_userdata( $user_id ) ) ) { do_action( 'wp_ntk_mentor_profile_updated', $user_id ); }
+		do_action( 'wp_ntk_mentor_profile_updated', $user_id );
 	}
 
 	/**

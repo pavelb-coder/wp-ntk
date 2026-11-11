@@ -177,8 +177,11 @@ final class WP_NTK_Project_Files {
   // Старое значение обязательно: не затираем одновременное изменение другого поля.
   if ( false === update_post_meta( $id, self::META, wp_slash( $remaining ), $previous ) ) { return 'changed'; }
   do_action( 'wp_ntk_project_changed' );
-  if ( ! self::remove_blob( $file ) ) { error_log( 'WP NTK: метаданные вложения удалены, но не удалось удалить файл из хранилища: ' . $file['blob'] ); return 'cleanup'; }
-  return 'deleted';
+  $removed = self::remove_blob( $file );
+  if ( ! $removed ) { error_log( 'WP NTK: метаданные вложения удалены, но не удалось удалить файл из хранилища: ' . $file['blob'] ); }
+  $sync = new WP_NTK_Project_Export( new WP_NTK_Network() ); $exported = $sync->sync_deleted_file();
+  if ( ! $removed ) { return 'cleanup'; }
+  return $exported ? 'deleted' : 'export_pending';
  }
  /** Проверяет и переносит загруженные файлы; при ошибке удаляет все новые файлы. */
  public static function prepare( $id ) {

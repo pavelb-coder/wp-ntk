@@ -15,7 +15,8 @@ final class WP_NTK_Network {
   add_action( 'admin_post_wp_ntk_smb_export', array( $this, 'manual_export' ) );
   add_action( self::EVENT, array( $this, 'scheduled_export' ) );
   add_action( 'wp_ntk_mentor_registered', array( $this, 'schedule' ) );
-  add_action( 'wp_ntk_mentor_profile_updated', array( $this, 'schedule' ) );
+  add_action( 'wp_ntk_mentor_profile_updated', array( $this, 'profile_changed' ) );
+  add_action( 'profile_update', array( $this, 'schedule' ) );
   add_action( 'delete_user', array( $this, 'schedule' ) );
   add_action( 'deleted_user', array( $this, 'schedule' ) );
  }
@@ -74,7 +75,7 @@ final class WP_NTK_Network {
   <tr><th><label for="ntk-smb-user">Логин</label></th><td><input class="regular-text" id="ntk-smb-user" name="user" required value="<?php echo esc_attr( isset( $c['user'] ) ? $c['user'] : '' ); ?>"></td></tr>
   <tr><th><label for="ntk-smb-domain">Домен (необязательно)</label></th><td><input class="regular-text" id="ntk-smb-domain" name="domain" value="<?php echo esc_attr( isset( $c['domain'] ) ? $c['domain'] : '' ); ?>"></td></tr>
   <tr><th><label for="ntk-smb-password">Пароль</label></th><td><input type="password" class="regular-text" id="ntk-smb-password" name="password" autocomplete="new-password"><p class="description"><?php echo empty( $c['secret'] ) ? 'Введите пароль.' : 'Пароль сохранён. Оставьте поле пустым, чтобы его не менять.'; ?></p></td></tr>
-  <tr><th>Автоматически</th><td><label><input type="checkbox" name="auto" value="1" <?php checked( ! empty( $c['auto'] ) ); ?>> Выгружать после регистрации, изменения анкеты и удаления пользователя</label><p class="description">Выгрузка запускается через WP-Cron: без посещений сайта или настроенного системного cron она может задержаться.</p></td></tr></table><?php submit_button( 'Сохранить настройки' ); ?></form>
+  <tr><th>Автоматически</th><td><label><input type="checkbox" name="auto" value="1" <?php checked( ! empty( $c['auto'] ) ); ?>> Выгружать после регистрации, изменения анкеты и удаления пользователя; изменения анкеты отправляются сразу</label><p class="description">Выгрузка запускается через WP-Cron: без посещений сайта или настроенного системного cron она может задержаться.</p></td></tr></table><?php submit_button( 'Сохранить настройки' ); ?></form>
   <h2>Проверка и выгрузка</h2><p>Проверка только читает каталог; для выгрузки нужны также права записи.</p>
   <?php foreach ( array( 'test' => 'Проверить подключение', 'export' => 'Выгрузить сейчас' ) as $action => $label ) : ?><form style="display:inline-block;margin-right:8px" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="wp_ntk_smb_<?php echo esc_attr( $action ); ?>"><?php wp_nonce_field( 'wp_ntk_smb_' . $action ); ?><button class="button"><?php echo esc_html( $label ); ?></button></form><?php endforeach; ?>
   <?php if ( is_array( $status ) && ! empty( $status['message'] ) ) : ?><p><strong>Последний результат:</strong> <?php echo esc_html( $status['message'] ); ?> (<?php echo esc_html( isset( $status['time'] ) ? $status['time'] : '' ); ?> UTC)</p><?php endif; ?>
@@ -84,7 +85,8 @@ final class WP_NTK_Network {
  public function test() { $this->allowed(); check_admin_referer( 'wp_ntk_smb_test' ); $ok = $this->send( '' ); $this->status( $ok ? 'Подключение к каталогу успешно.' : 'Не удалось подключиться. Проверьте путь, реквизиты, smbclient и права.' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-network' ) ); exit; }
  public function manual_export() { $this->allowed(); check_admin_referer( 'wp_ntk_smb_export' ); $this->export(); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-network' ) ); exit; }
  public function schedule() { $c = $this->config(); if ( ! empty( $c['auto'] ) && ! wp_next_scheduled( self::EVENT ) ) { wp_schedule_single_event( time() + 10, self::EVENT ); } }
- public function scheduled_export() { $c = $this->config(); if ( ! empty( $c['auto'] ) ) { $this->export(); } }
+ public function profile_changed() { $c = $this->config(); if ( ! empty( $c['auto'] ) && ! $this->export() ) { $this->schedule(); } }
+ public function scheduled_export() { $c = $this->config(); if ( ! empty( $c['auto'] ) && ! $this->export() && ! wp_next_scheduled( self::EVENT ) ) { wp_schedule_single_event( time() + 300, self::EVENT ); } }
  private function export() {
   $now = time(); $old = get_option( self::LOCK );
   if ( is_array( $old ) && isset( $old['time'] ) && (int) $old['time'] < $now - 600 ) { delete_option( self::LOCK ); }
@@ -99,7 +101,7 @@ final class WP_NTK_Network {
    foreach ( $fields as $field ) { $headers[] = $field['label']; } foreach ( $headers as &$header ) { if ( preg_match( '/^[\s\x00-\x1F]*[=+\-@]/u', $header ) ) { $header = "'" . $header; } } unset( $header ); if ( false === fputcsv( $f, $headers, ';' ) ) { fclose( $f ); throw new RuntimeException(); }
    $offset = 0;
    do {
-    $users = get_users( array( 'role' => WP_NTK_Setup::ROLE, 'number' => 200, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC' ) );
+    $users = get_users( array( 'role__in' => array( WP_NTK_Setup::ROLE, 'subscriber' ), 'number' => 200, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC' ) );
     foreach ( $users as $user ) {
      $row = array( $user->ID, $user->user_email, $user->user_registered );
      foreach ( WP_NTK_Fields::get_values( $user->ID ) as $v ) { $row[] = $v; }
