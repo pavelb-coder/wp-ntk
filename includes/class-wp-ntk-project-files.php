@@ -4,14 +4,17 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 final class WP_NTK_Project_Files {
  const OPTION = 'wp_ntk_project_file_sections';
  const META = '_wp_ntk_project_files';
+ const DELETED_LABELS = 'wp_ntk_deleted_file_section_labels';
  const TYPES = array( 'pdf' => 'PDF', 'docx' => 'DOCX', 'xlsx' => 'XLSX', 'pptx' => 'PPTX', 'jpg' => 'JPG', 'png' => 'PNG' );
  public function hooks() {
   add_action( 'admin_menu', array( $this, 'menu' ), 20 );
   add_action( 'admin_post_wp_ntk_file_sections', array( $this, 'save_sections' ) );
+  add_action( 'admin_post_wp_ntk_delete_file_section', array( $this, 'delete_section' ) );
   add_action( 'admin_post_wp_ntk_project_download', array( $this, 'download' ) );
   add_action( 'before_delete_post', array( $this, 'delete_project_files' ), 10, 2 );
  }
  public static function sections() { $v = get_option( self::OPTION, array() ); return is_array( $v ) ? $v : array(); }
+ public static function section_label( $key, $file ) { $sections = self::sections(); $deleted = get_option( self::DELETED_LABELS, array() ); if ( isset( $sections[$key]['name'] ) ) { return $sections[$key]['name']; } if ( is_array( $deleted ) && isset( $deleted[$key] ) ) { return $deleted[$key]; } return isset( $file['section'] ) ? $file['section'] : ''; }
  public static function files( $id ) { $v = $id ? get_post_meta( $id, self::META, true ) : array(); return is_array( $v ) ? $v : array(); }
  /** Каталог задаётся вне публичных директорий и заранее создаётся администратором сервера. */
  public static function root() {
@@ -45,7 +48,22 @@ final class WP_NTK_Project_Files {
    if ( isset( $out[$key] ) ) { wp_die( 'Не удалось создать раздел, попробуйте ещё раз.' ); }
    $out[$key] = $section;
   }
-  update_option( self::OPTION, $out, false ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files&saved=1' ) ); exit;
+  update_option( self::OPTION, $out, false ); do_action( 'wp_ntk_project_changed' ); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files&saved=1' ) ); exit;
+ }
+ /** Удаляется только настройка раздела; метаданные и ранее загруженные файлы остаются. */
+ public function delete_section() {
+  $this->allowed();
+  $key = isset( $_POST['section'] ) && is_string( $_POST['section'] ) ? wp_unslash( $_POST['section'] ) : '';
+  if ( ! preg_match( '/^f_[a-f0-9]{12}$/D', $key ) ) { wp_die( 'Некорректный раздел.', '', array( 'response' => 400 ) ); }
+  check_admin_referer( 'wp_ntk_delete_file_section_' . $key );
+  $sections = self::sections(); if ( ! isset( $sections[$key] ) ) { wp_die( 'Раздел не найден.', '', array( 'response' => 404 ) ); }
+  $deleted = get_option( self::DELETED_LABELS, array() ); if ( ! is_array( $deleted ) ) { $deleted = array(); }
+  $deleted[$key] = $sections[$key]['name']; update_option( self::DELETED_LABELS, $deleted, false );
+  if ( get_option( self::DELETED_LABELS ) !== $deleted ) { wp_die( 'Не удалось сохранить название раздела. Попробуйте ещё раз.' ); }
+  unset( $sections[$key] ); update_option( self::OPTION, $sections, false );
+  if ( self::sections() !== $sections ) { wp_die( 'Не удалось удалить раздел. Попробуйте ещё раз.' ); }
+  do_action( 'wp_ntk_project_changed' );
+  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files&section_deleted=1' ) ); exit;
  }
  private function row( $prefix, $section ) {
   echo '<p><label>Название <input class="regular-text" name="' . esc_attr( $prefix . '[name]' ) . '" maxlength="150" value="' . esc_attr( $section['name'] ) . '"></label> ';
@@ -59,12 +77,16 @@ final class WP_NTK_Project_Files {
   $this->allowed(); $sections = self::sections();
   echo '<div class="wrap"><h1>Файлы проектов</h1>';
   if ( isset( $_GET['saved'] ) ) { echo '<div class="notice notice-success"><p>Разделы сохранены.</p></div>'; }
+  if ( isset( $_GET['section_deleted'] ) ) { echo '<div class="notice notice-success"><p>Раздел удалён. Ранее загруженные файлы сохранены.</p></div>'; }
   if ( ! self::smb_ready( true ) ) { echo '<div class="notice notice-error"><p>Сетевая папка недоступна для хранения вложений. Проверьте настройки раздела «Сетевая папка», smbclient и права записи. Старые файлы, загруженные в локальную закрытую папку, остаются в ней.</p></div>'; }
   else { echo '<div class="notice notice-success"><p>Сетевая папка для новых вложений доступна. Ограничьте доступ к ней средствами SMB.</p></div>'; }
-  echo '<p>По одному файлу в каждом включённом разделе. Изменения и удаление файлов возможны только до окончания приёма. Выключенный раздел скрывается из форм; ранее загруженные файлы сохраняются. Экспорт в SMB настраивается отдельно в разделе «Экспорт проектов». Ограничения PHP и веб-сервера могут быть ниже указанных.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_file_sections">'; wp_nonce_field( 'wp_ntk_file_sections' );
-  foreach ( $sections as $key => $section ) { echo '<hr><h2>' . esc_html( $section['name'] ) . '</h2>'; $this->row( 'sections[' . $key . ']', $section ); }
+  echo '<p>По одному файлу в каждом включённом разделе. Изменения и удаление файлов возможны только до окончания приёма. Выключенный раздел скрывается из форм; ранее загруженные файлы сохраняются. Ниже можно настроить экспорт в SMB. При удалении раздела ранее загруженные файлы сохраняются и доступны для просмотра, но раздел исчезает из формы. Ограничения PHP и веб-сервера могут быть ниже указанных.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_file_sections">'; wp_nonce_field( 'wp_ntk_file_sections' );
+  foreach ( $sections as $key => $section ) { echo '<hr><h2>Редактировать: ' . esc_html( $section['name'] ) . '</h2>'; $this->row( 'sections[' . $key . ']', $section ); echo '<p><button class="button button-link-delete" type="submit" form="wp-ntk-delete-' . esc_attr( $key ) . '" onclick="return confirm(&quot;Удалить раздел? Ранее загруженные файлы останутся. Несохранённые изменения в настройках разделов будут потеряны.&quot;);">Удалить раздел</button></p>'; }
   echo '<hr><h2>Добавить раздел</h2><p>Оставьте название пустым, если не добавляете раздел.</p>'; $this->row( 'new_section', array( 'name' => '', 'max' => 10, 'required' => 0, 'active' => 1, 'types' => array( 'pdf' ) ) );
-  submit_button( 'Сохранить разделы' ); echo '</form></div>';
+  submit_button( 'Сохранить разделы' ); echo '</form>';
+  foreach ( $sections as $key => $section ) { echo '<form id="wp-ntk-delete-' . esc_attr( $key ) . '" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_delete_file_section"><input type="hidden" name="section" value="' . esc_attr( $key ) . '">'; wp_nonce_field( 'wp_ntk_delete_file_section_' . $key ); echo '</form>'; }
+  $export = new WP_NTK_Project_Export( new WP_NTK_Network() ); $export->render_settings();
+  echo '</div>';
  }
  private static function valid_file( $tmp, $ext ) {
   if ( ! is_uploaded_file( $tmp ) || ! function_exists( 'finfo_open' ) ) { return false; }
@@ -156,7 +178,7 @@ final class WP_NTK_Project_Files {
     $ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ); if ( 'jpeg' === $ext ) { $ext = 'jpg'; }
     if ( isset( $files[$key] ) && ! self::storage_ready( $files[$key] ) ) { $errors[] = 'Хранилище прежнего файла недоступно. Обратитесь к администратору.'; }
     elseif ( ! $size || $size > (int) $section['max'] * 1048576 || $size > wp_max_upload_size() ) { $errors[] = 'Файл раздела «' . $section['name'] . '» пуст или превышает разрешённый размер.'; }
-    elseif ( ! in_array( $ext, $section['types'], true ) || ! self::valid_file( $tmp, $ext ) ) { $errors[] = 'Недопустимый формат файла в разделе «' . $section['name'] . '».'; }
+    elseif ( ! in_array( $ext, $section['types'], true ) || ! self::valid_file( $tmp, $ext ) ) { $errors[] = 'Недопустимый формат файла в разделе «' . $section['name'] . '». Разрешены: ' . strtoupper( implode( ', ', $section['types'] ) ) . '. Проверьте расширение и содержимое файла.'; }
     else {
      try { $blob = bin2hex( random_bytes( 20 ) ) . '.bin'; } catch ( Throwable $e ) { $blob = ''; }
      $record = array( 'blob' => $blob, 'storage' => 'smb', 'target' => self::target(), 'name' => $name, 'section' => $section['name'], 'ext' => $ext, 'size' => $size );

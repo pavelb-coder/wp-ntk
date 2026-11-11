@@ -366,3 +366,7 @@
 
 /* Кнопки шапки располагаются рядом и переносятся при нехватке места. */
 .wp-ntk .wp-ntk-head-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+
+/* Ошибка формата вложения отображается сразу после выбора файла. */
+.wp-ntk-file-error { color: #b32d2e; font-weight: 600; }
+.wp-ntk-file-error:empty { display: none; }

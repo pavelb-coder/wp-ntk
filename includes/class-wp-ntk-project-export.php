@@ -19,17 +19,18 @@ final class WP_NTK_Project_Export {
  }
  private function config() { $v = get_option( self::OPTION, array() ); return is_array( $v ) ? $v : array(); }
  private function allowed() { if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.', '', array( 'response' => 403 ) ); } }
- public function menu() { add_submenu_page( 'wp-ntk', 'Экспорт проектов', 'Экспорт проектов', 'manage_options', 'wp-ntk-project-export', array( $this, 'page' ) ); }
- public function page() {
+ public function menu() { add_submenu_page( null, 'Экспорт проектов', 'Экспорт проектов', 'manage_options', 'wp-ntk-project-export', array( $this, 'page' ) ); }
+ public function page() { $this->allowed(); $page = new WP_NTK_Project_Files(); $page->page(); }
+ public function render_settings() {
   $this->allowed(); $c = $this->config(); $status = get_option( self::STATUS, array() );
-  echo '<div class="wrap"><h1>Экспорт проектов в SMB</h1><p>Используются настройки подключения из раздела «Сетевая папка». Внутри неё создаётся отдельное дерево <code>wp-ntk-projects/site-ID/nomination-N/project-ID</code>. Номера номинаций соответствуют настройкам проектов. В каждой папке — данные проекта в UTF-8 JSON и файлы, имена которых указаны в JSON.</p>';
+  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Внутри неё создаётся отдельное дерево <code>wp-ntk-projects/site-ID/nomination-N/project-ID</code>. Номера номинаций соответствуют настройкам проектов. В каждой папке — данные проекта в UTF-8 JSON и файлы, имена которых указаны в JSON.</p>';
   echo '<p><strong>Важно:</strong> выгрузка содержит персональные данные и копии закрытых вложений. Доступ к сетевой папке настраивается отдельно от WordPress: разрешите его только уполномоченным лицам. Изменённые и удалённые вложения, а также проекты из корзины удаляются из выгрузки при успешной синхронизации; посторонние файлы плагин не удаляет. Используйте выделенную папку исключительно для этого сайта: зарезервированные имена файлов нельзя занимать вручную. Пустые папки могут остаться. Копии в резервных архивах не удаляются. При сбое возможна неполная выгрузка; проверяйте результат и делайте резервные копии.</p>';
   echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_export_settings">'; wp_nonce_field( 'wp_ntk_project_export_settings' );
   echo '<p><label><input type="checkbox" name="auto" value="1" ' . checked( ! empty( $c['auto'] ), true, false ) . '> Автоматически после изменения проекта и по расписанию</label></p><p><label>Периодичность: <select name="interval">';
   foreach ( array( 'hourly' => 'Каждый час', 'twicedaily' => 'Два раза в сутки', 'daily' => 'Раз в сутки' ) as $key => $label ) { echo '<option value="' . esc_attr( $key ) . '" ' . selected( isset( $c['interval'] ) ? $c['interval'] : 'daily', $key, false ) . '>' . esc_html( $label ) . '</option>'; }
   echo '</select></label></p><p>WP-Cron зависит от посещений сайта; для своевременного запуска настройте системный cron. Все активные проекты проверяются при каждом запуске.</p>'; submit_button( 'Сохранить' ); echo '</form>';
   echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_export_now">'; wp_nonce_field( 'wp_ntk_project_export_now' ); submit_button( 'Синхронизировать сейчас', 'secondary' ); echo '</form>';
-  if ( ! empty( $status['message'] ) ) { echo '<p><strong>Последний результат:</strong> ' . esc_html( $status['message'] ) . ' (' . esc_html( $status['time'] ) . ' UTC)</p>'; } echo '</div>';
+  if ( ! empty( $status['message'] ) ) { echo '<p><strong>Последний результат:</strong> ' . esc_html( $status['message'] ) . ' (' . esc_html( $status['time'] ) . ' UTC)</p>'; } echo '</section>';
  }
  public function save() {
   $this->allowed(); check_admin_referer( 'wp_ntk_project_export_settings' );
@@ -38,9 +39,9 @@ final class WP_NTK_Project_Export {
   $auto = empty( $_POST['auto'] ) ? 0 : 1; update_option( self::OPTION, array( 'auto' => $auto, 'interval' => $interval ), false );
   wp_clear_scheduled_hook( self::EVENT ); wp_clear_scheduled_hook( self::CHANGE );
   if ( $auto ) { wp_schedule_event( time() + 60, $interval, self::EVENT ); $this->schedule_change(); }
-  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-export' ) ); exit;
+  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files' ) . '#wp-ntk-export' ); exit;
  }
- public function manual() { $this->allowed(); check_admin_referer( 'wp_ntk_project_export_now' ); $this->export(); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-export' ) ); exit; }
+ public function manual() { $this->allowed(); check_admin_referer( 'wp_ntk_project_export_now' ); $this->export(); wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files' ) . '#wp-ntk-export' ); exit; }
  public function schedule_change() { $c = $this->config(); if ( ! empty( $c['auto'] ) && ! wp_next_scheduled( self::CHANGE ) ) { wp_schedule_single_event( time() + 20, self::CHANGE ); } }
  public function run_auto() { $c = $this->config(); if ( ! empty( $c['auto'] ) ) { $this->export(); } }
  private function status( $text ) { update_option( self::STATUS, array( 'message' => $text, 'time' => gmdate( 'Y-m-d H:i:s' ) ), false ); }
@@ -82,7 +83,7 @@ final class WP_NTK_Project_Export {
      $temporary = false; $path = WP_NTK_Project_Files::local_copy( $f, $temporary ); $remote = 'file-' . $key . '.' . $f['ext'];
      if ( ! $path ) { throw new RuntimeException( 'Файл проекта недоступен.' ); }
      if ( $temporary ) { $copies[] = $path; }
-     $uploads[$remote] = $path; $list[] = array( 'раздел' => isset( $f['section'] ) ? $f['section'] : '', 'имя_оригинала' => isset( $f['name'] ) ? $f['name'] : '', 'имя_в_папке' => $remote );
+     $uploads[$remote] = $path; $list[] = array( 'раздел' => WP_NTK_Project_Files::section_label( $key, $f ), 'имя_оригинала' => isset( $f['name'] ) ? $f['name'] : '', 'имя_в_папке' => $remote );
     }
     $author = get_userdata( $p->post_author );
     $info = array( 'id_проекта' => $p->ID, 'номинация' => isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom, 'номер_номинации' => $nom, 'название' => $p->post_title, 'описание' => $p->post_content, 'id_автора' => (int) $p->post_author, 'автор' => $author ? $author->display_name : '', 'email_аккаунта' => $author ? $author->user_email : '', 'дата_создания' => $p->post_date, 'файлы' => $list );

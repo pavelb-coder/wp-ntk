@@ -1,7 +1,7 @@
 /*
  * WP NTK — личный кабинет наставника.
  * Формы работают и без этого скрипта: он лишь добавляет кнопку «Показать»
- * у паролей и не даёт отправить форму дважды двойным нажатием.
+ * у паролей, проверку расширений файлов и защиту от двойной отправки.
  */
 ( function () {
 	'use strict';
@@ -65,7 +65,25 @@
 		} );
 	}
 
+	// Быстрая проверка расширения; окончательный формат проверяется сервером.
+	function initProjectFiles() {
+		each( document.querySelectorAll( '.wp-ntk-project-file' ), function ( input ) {
+			var output = document.getElementById( input.getAttribute( 'aria-describedby' ) );
+			function validate() {
+				var extensions = ( input.getAttribute( 'accept' ) || '' ).toLowerCase().split( ',' );
+				var name = input.files && input.files.length ? input.files[0].name.toLowerCase() : '';
+				var suffix = name.lastIndexOf( '.' ) < 0 ? '' : name.slice( name.lastIndexOf( '.' ) );
+				var message = name && extensions.indexOf( suffix ) === -1 ? 'Недопустимый формат файла. Разрешены: ' + extensions.join( ', ' ) + '.' : '';
+				input.setCustomValidity( message );
+				if ( output ) { output.textContent = message; }
+				if ( message ) { input.setAttribute( 'aria-invalid', 'true' ); } else { input.removeAttribute( 'aria-invalid' ); }
+			}
+			input.addEventListener( 'change', validate );
+		} );
+	}
+
 	function init() {
+		initProjectFiles();
 		initPasswordToggles();
 		initSubmitGuard();
 		initProjectTimers();
