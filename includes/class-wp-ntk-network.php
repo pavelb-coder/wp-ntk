@@ -114,6 +114,10 @@ final class WP_NTK_Network {
   $this->status( $ok ? 'Выгрузка mentors.csv завершена.' : 'Выгрузка не выполнена. Проверьте подключение и права записи.' );
   return $ok;
  }
+ /** Компонент пути не должен менять структуру SMB-команды или выходить за пределы ресурса. */
+ public static function valid_project_dir( $dir ) {
+  return is_string( $dir ) && '' !== $dir && strlen( $dir ) <= 200 && 1 === preg_match( '//u', $dir ) && '.' !== $dir && '..' !== $dir && ! preg_match( '/[\x00-\x1f\x7f\\\\\/:*?"<>|;]/u', $dir ) && ! preg_match( '/[. ]$/u', $dir );
+ }
  /** Операция в выделенной подпапке проектов; команды и имена формируются самим плагином. */
  public function project_command( $dirs, $command, $probe = false, $expected_target = null ) {
   $c = $this->config();
@@ -121,7 +125,7 @@ final class WP_NTK_Network {
   $parsed = $this->parse_path( isset( $c['path'] ) ? $c['path'] : '' );
   $password = $this->decrypt( isset( $c['secret'] ) ? $c['secret'] : '' );
   if ( ! $parsed || false === $password || empty( $c['user'] ) || ! function_exists( 'proc_open' ) || ! is_array( $dirs ) || ! is_string( $command ) || preg_match( '/[\r\n;]/', $command ) ) { return false; }
-  foreach ( $dirs as $dir ) { if ( ! is_string( $dir ) || ! preg_match( '/^[A-Za-z0-9_.-]{1,100}$/D', $dir ) || '.' === $dir || '..' === $dir ) { return false; } }
+  foreach ( $dirs as $dir ) { if ( ! self::valid_project_dir( $dir ) ) { return false; } }
   $binary = ''; foreach ( array( '/usr/bin/smbclient', '/usr/local/bin/smbclient', '/bin/smbclient' ) as $candidate ) { if ( is_executable( $candidate ) ) { $binary = $candidate; break; } }
   if ( ! $binary ) { return false; }
   $auth = tempnam( sys_get_temp_dir(), 'ntkauth_' ); if ( false === $auth ) { return false; }
