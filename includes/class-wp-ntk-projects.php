@@ -104,7 +104,7 @@ final class WP_NTK_Projects {
   <p><a href="<?php echo esc_url( add_query_arg( array( 'page' => 'wp-ntk-projects', 'view' => 'active' ), admin_url( 'admin.php' ) ) . '#wp-ntk-admin-projects' ); ?>">Все проекты</a> | <a href="<?php echo esc_url( add_query_arg( array( 'page' => 'wp-ntk-projects', 'view' => 'trash' ), admin_url( 'admin.php' ) ) . '#wp-ntk-admin-projects' ); ?>">Корзина</a></p>
   <p><?php echo 'trash' === $view ? 'В корзине: ' : 'Всего проектов: '; echo (int) $q->found_posts; ?>. Удалённые проекты хранятся в корзине WordPress и могут быть автоматически удалены по её настройкам.</p>
   <table class="widefat striped"><thead><tr><th>Проект и описание</th><th>Номинация</th><th>Наставник</th><th>Дата</th><th>Действие</th></tr></thead><tbody>
-  <?php foreach ( $q->posts as $p ) : $mentor = get_userdata( $p->post_author ); $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); ?><tr><td><strong><?php echo esc_html( $p->post_title ); ?></strong><br><?php echo nl2br( esc_html( $p->post_content ) ); ?></td><td><?php echo esc_html( isset( $c['nominations'][$nom] ) ? $c['nominations'][$nom] : 'Неизвестно' ); ?></td><td><?php if ( $mentor ) : ?><a href="<?php echo esc_url( get_edit_user_link( $mentor->ID ) ); ?>"><?php echo esc_html( $mentor->display_name ); ?></a><?php else : ?>Пользователь удалён<?php endif; ?></td><td><?php echo esc_html( $p->post_date ); ?></td><td>
+  <?php foreach ( $q->posts as $p ) : $mentor = get_userdata( $p->post_author ); $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); ?><tr><td><strong><?php echo esc_html( $p->post_title ); ?></strong><br><?php echo nl2br( esc_html( $p->post_content ) ); ?><?php $attachments = WP_NTK_Project_Files::files( $p->ID ); if ( $attachments ) : ?><ul><?php foreach ( $attachments as $key => $file ) : ?><li><?php echo esc_html( $file['section'] ); ?>: <a href="<?php echo esc_url( WP_NTK_Project_Files::url( $p->ID, $key ) ); ?>"><?php echo esc_html( $file['name'] ); ?></a></li><?php endforeach; ?></ul><?php endif; ?></td><td><?php echo esc_html( isset( $c['nominations'][$nom] ) ? $c['nominations'][$nom] : 'Неизвестно' ); ?></td><td><?php if ( $mentor ) : ?><a href="<?php echo esc_url( get_edit_user_link( $mentor->ID ) ); ?>"><?php echo esc_html( $mentor->display_name ); ?></a><?php else : ?>Пользователь удалён<?php endif; ?></td><td><?php echo esc_html( $p->post_date ); ?></td><td>
   <?php $operation = 'trash' === $view ? 'restore' : 'trash'; ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"<?php if ( 'trash' === $operation ) : ?> onsubmit="return confirm('Переместить проект в корзину?');"<?php endif; ?>>
   <input type="hidden" name="action" value="wp_ntk_project_manage"><input type="hidden" name="operation" value="<?php echo esc_attr( $operation ); ?>"><input type="hidden" name="project_id" value="<?php echo (int) $p->ID; ?>"><?php wp_nonce_field( 'wp_ntk_project_' . $operation . '_' . $p->ID ); ?><button class="button" type="submit"><?php echo 'trash' === $operation ? 'Удалить' : 'Восстановить'; ?></button></form>
   </td></tr><?php endforeach; ?>
@@ -127,10 +127,18 @@ final class WP_NTK_Projects {
   if ( '' === $v['description'] || WP_NTK_Fields::length( $v['description'] ) > 5000 ) { $this->errors[] = 'Укажите описание проекта (до 5000 символов).'; }
   if ( ! in_array( $v['nomination'], array( '1', '2', '3', '4' ), true ) || empty( $c['nominations'][$v['nomination']] ) ) { $this->errors[] = 'Выберите номинацию.'; }
   if ( $this->errors ) { return; }
+  $prepared = WP_NTK_Project_Files::prepare( $id );
+  if ( $prepared['errors'] ) { $this->errors = array_merge( $this->errors, $prepared['errors'] ); return; }
+  $previous = $id ? get_post( $id ) : null;
   $args = array( 'post_type' => self::TYPE, 'post_status' => 'private', 'post_title' => wp_slash( $v['title'] ), 'post_content' => wp_slash( $v['description'] ), 'post_author' => get_current_user_id() );
   if ( $id ) { $args['ID'] = $id; }
   $saved = wp_insert_post( $args, true );
-  if ( is_wp_error( $saved ) ) { $this->errors[] = 'Не удалось сохранить проект. Попробуйте ещё раз.'; return; }
+  if ( is_wp_error( $saved ) ) { WP_NTK_Project_Files::rollback( $prepared['new'] ); $this->errors[] = 'Не удалось сохранить проект. Попробуйте ещё раз.'; return; }
+  if ( ! WP_NTK_Project_Files::commit( $saved, $prepared ) ) {
+   if ( $previous ) { wp_update_post( array( 'ID' => $previous->ID, 'post_title' => wp_slash( $previous->post_title ), 'post_content' => wp_slash( $previous->post_content ) ) ); }
+   else { wp_delete_post( $saved, true ); }
+   $this->errors[] = 'Не удалось сохранить данные файлов. Попробуйте ещё раз.'; return;
+  }
   update_post_meta( $saved, '_wp_ntk_nomination', $v['nomination'] );
   wp_safe_redirect( add_query_arg( array( 'wp_ntk_tab' => 'projects', 'ntk_project_saved' => '1' ), $this->page_url() ) . '#wp-ntk-projects' ); exit;
  }
@@ -161,6 +169,8 @@ final class WP_NTK_Projects {
     echo '<p><strong>Номинация:</strong> ' . esc_html( isset( $c['nominations'][$nomination] ) ? $c['nominations'][$nomination] : 'Номинация не указана' ) . '</p>';
     echo '<p><strong>Название проекта:</strong> ' . esc_html( $project->post_title ) . '</p>';
     echo '<p><strong>Описание проекта:</strong><br>' . nl2br( esc_html( $project->post_content ) ) . '</p>';
+    $attachments = WP_NTK_Project_Files::files( $project->ID );
+    if ( $attachments ) { echo '<h4>Файлы</h4><ul>'; foreach ( $attachments as $key => $file ) { echo '<li>' . esc_html( $file['section'] ) . ': <a href="' . esc_url( WP_NTK_Project_Files::url( $project->ID, $key ) ) . '">' . esc_html( $file['name'] ) . '</a></li>'; } echo '</ul>'; }
     if ( 'open' === $period['state'] ) { echo '<p><a href="' . esc_url( add_query_arg( 'ntk_project_form', $project->ID, $url ) . '#wp-ntk-project-form' ) . '">Изменить проект</a></p>'; }
     echo '<p><a href="' . esc_url( $url . '#wp-ntk-projects' ) . '">Закрыть просмотр</a></p></section>';
    } else { echo '<div class="wp-ntk-notice wp-ntk-notice--error" role="alert">Проект не найден или недоступен.</div>'; }
@@ -171,13 +181,25 @@ final class WP_NTK_Projects {
   if ( ! $v && 'new' === $form ) { $v = array( 'id' => 0, 'title' => '', 'description' => '', 'nomination' => '' ); }
   elseif ( ! $v && ctype_digit( $form ) ) { $p = get_post( (int) $form ); if ( $p && self::TYPE === $p->post_type && 'private' === $p->post_status && (int) $p->post_author === get_current_user_id() ) { $v = array( 'id' => $p->ID, 'title' => $p->post_title, 'description' => $p->post_content, 'nomination' => (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ) ); } }
   if ( $v && 'open' === $period['state'] ) {
-   echo '<h3>' . ( $v['id'] ? 'Изменить проект' : 'Регистрация проекта' ) . '</h3><form class="wp-ntk-form" id="wp-ntk-project-form" method="post" action="' . esc_url( $url . '#wp-ntk-projects' ) . '">';
+   echo '<h3>' . ( $v['id'] ? 'Изменить проект' : 'Регистрация проекта' ) . '</h3><form class="wp-ntk-form" id="wp-ntk-project-form" method="post" enctype="multipart/form-data" action="' . esc_url( $url . '#wp-ntk-projects' ) . '">';
    echo '<input type="hidden" name="wp_ntk_project_action" value="save"><input type="hidden" name="wp_ntk_project_id" value="' . (int) $v['id'] . '">'; wp_nonce_field( 'wp_ntk_project_save', 'wp_ntk_project_nonce' );
    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-nomination">Номинация *</label><select class="wp-ntk-input" id="ntk-project-nomination" name="wp_ntk_project_nomination" required><option value="">Выберите номинацию</option>';
    foreach ( $c['nominations'] as $id => $name ) { echo '<option value="' . esc_attr( $id ) . '" ' . selected( (string) $id, $v['nomination'], false ) . '>' . esc_html( $name ) . '</option>'; }
    echo '</select></div>';
    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-title">Название проекта *</label><input class="wp-ntk-input" id="ntk-project-title" name="wp_ntk_project_title" maxlength="200" required value="' . esc_attr( $v['title'] ) . '"></div>';
    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="ntk-project-description">Описание проекта *</label><textarea class="wp-ntk-input" id="ntk-project-description" name="wp_ntk_project_description" maxlength="5000" rows="5" required>' . esc_textarea( $v['description'] ) . '</textarea></div>';
+   $uploaded = WP_NTK_Project_Files::files( $v['id'] );
+   foreach ( WP_NTK_Project_Files::sections() as $key => $section ) {
+    if ( empty( $section['active'] ) ) { continue; }
+    $existing = isset( $uploaded[$key] ) ? $uploaded[$key] : null;
+    $accept = array(); foreach ( $section['types'] as $type ) { $accept[] = '.' . $type; if ( 'jpg' === $type ) { $accept[] = '.jpeg'; } }
+    echo '<div class="wp-ntk-field"><label class="wp-ntk-label" for="wp-ntk-file-' . esc_attr( $key ) . '">' . esc_html( $section['name'] ) . ( ! empty( $section['required'] ) ? ' *' : '' ) . '</label>';
+    echo '<p class="wp-ntk-hint">Форматы: ' . esc_html( implode( ', ', $section['types'] ) ) . '; до ' . (int) $section['max'] . ' МБ. Один файл.</p>';
+    if ( $existing ) { echo '<p>Текущий файл: <a href="' . esc_url( WP_NTK_Project_Files::url( $v['id'], $key ) ) . '">' . esc_html( $existing['name'] ) . '</a></p>'; }
+    echo '<input class="wp-ntk-input" type="file" id="wp-ntk-file-' . esc_attr( $key ) . '" name="wp_ntk_attachment[' . esc_attr( $key ) . ']" accept="' . esc_attr( implode( ',', $accept ) ) . '"' . ( ! empty( $section['required'] ) && ! $existing ? ' required' : '' ) . '>';
+    if ( $existing ) { echo '<p class="wp-ntk-check"><label><input type="checkbox" name="wp_ntk_remove_file[' . esc_attr( $key ) . ']" value="1"> Удалить текущий файл</label></p>'; }
+    echo '</div>';
+   }
    echo '<button class="wp-ntk-button" type="submit">Сохранить проект</button></form>';
   }
   echo '</section>';
