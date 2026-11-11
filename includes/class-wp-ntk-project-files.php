@@ -132,6 +132,7 @@ final class WP_NTK_Project_Files {
   if ( ! $file || ! self::remote_path_safe( $file ) || ! chmod( $file, 0600 ) ) { if ( $file ) { @unlink( $file ); } return false; }
   return $file;
  }
+ public static function create_temp_file() { return self::temporary(); }
  private static function storage_ready( $f ) {
   if ( ! is_array( $f ) ) { return false; }
   if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) { return ! empty( $f['target'] ) && self::target() === $f['target'] && self::smb_ready(); }

@@ -17,6 +17,9 @@ final class WP_NTK_Project_Export {
   add_action( 'admin_post_wp_ntk_project_export_now', array( $this, 'manual' ) );
   add_action( self::EVENT, array( $this, 'run_auto' ) ); add_action( self::CHANGE, array( $this, 'run_auto' ) );
   add_action( 'wp_ntk_project_changed', array( $this, 'schedule_change' ) );
+  add_action( 'wp_ntk_mentor_profile_updated', array( $this, 'schedule_change' ) );
+  add_action( 'profile_update', array( $this, 'schedule_change' ) );
+  add_action( 'deleted_user', array( $this, 'schedule_change' ) );
  }
  private function config() { $v = get_option( self::OPTION, array() ); return is_array( $v ) ? $v : array(); }
  private function allowed() { if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.', '', array( 'response' => 403 ) ); } }
@@ -24,7 +27,7 @@ final class WP_NTK_Project_Export {
  public function page() { $this->allowed(); $page = new WP_NTK_Project_Files(); $page->page(); }
  public function render_settings() {
   $this->allowed(); $c = $this->config(); $status = get_option( self::STATUS, array() );
-  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/Название проекта</code>. Имена проектов и файлов сохраняются по возможности; недопустимые символы заменяются, длинные имена сокращаются, а при совпадениях добавляется суффикс. В каждой папке — данные проекта в UTF-8 JSON и файлы, имена которых указаны в JSON. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
+  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/Название проекта</code>. Имена проектов и файлов сохраняются по возможности; недопустимые символы заменяются, длинные имена сокращаются, а при совпадениях добавляется суффикс. В каждой папке — данные проекта в JSON, XLSX и PDF, анкета наставника в XLSX и вложения. Для создания XLSX нужны ZipArchive, для PDF — iconv и zlib. Временная папка PHP должна быть недоступна по HTTP. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
   echo '<p><strong>Важно:</strong> выгрузка содержит персональные данные и копии закрытых вложений. Доступ к сетевой папке настраивается отдельно от WordPress: разрешите его только уполномоченным лицам. Изменённые и удалённые вложения, а также проекты из корзины удаляются из выгрузки при успешной синхронизации; посторонние файлы плагин не удаляет. Используйте выделенную папку исключительно для этого сайта: зарезервированные имена файлов нельзя занимать вручную. Пустые папки могут остаться. Копии в резервных архивах не удаляются. При сбое возможна неполная выгрузка; проверяйте результат и делайте резервные копии.</p>';
   echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_export_settings">'; wp_nonce_field( 'wp_ntk_project_export_settings' );
   echo '<p><label><input type="checkbox" name="auto" value="1" ' . checked( ! empty( $c['auto'] ), true, false ) . '> Автоматически после изменения проекта и по расписанию</label></p><p><label>Периодичность: <select name="interval">';
@@ -125,7 +128,7 @@ final class WP_NTK_Project_Export {
  private function export() {
   $old = get_option( self::LOCK ); if ( is_array( $old ) && ! empty( $old['time'] ) && (int) $old['time'] < time() - 3600 ) { delete_option( self::LOCK ); }
   $token = wp_generate_uuid4(); if ( ! add_option( self::LOCK, array( 'token' => $token, 'time' => time() ), '', 'no' ) ) { $this->status( 'Синхронизация уже выполняется.' ); return false; }
-  $temp = false; $copies = array(); $ok = false; $count = 0;
+  $temp = false; $copies = array(); $documents = array(); $ok = false; $count = 0;
   try {
    $cfg = get_option( WP_NTK_Network::CONFIG, array() ); if ( empty( $cfg['path'] ) ) { throw new RuntimeException( 'Не настроена сетевая папка.' ); }
    // Отдельный реестр для каждого сетевого пути: при смене адреса нельзя удалять файлы другого ресурса.
@@ -140,7 +143,7 @@ final class WP_NTK_Project_Export {
     $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); if ( ! in_array( $nom, array( '1','2','3','4' ), true ) ) { throw new RuntimeException( 'У проекта некорректная номинация.' ); }
     $dirs = array( $nomination_dirs[$nom], $project_dirs[(int) $p->ID] );
     if ( ! $this->ensure_dirs( $dirs ) ) { throw new RuntimeException( 'Не удалось создать папку проекта.' ); }
-    $files = WP_NTK_Project_Files::files( $p->ID ); ksort( $files ); $list = array(); $uploads = array(); $used_names = array();
+    $files = WP_NTK_Project_Files::files( $p->ID ); ksort( $files ); $list = array(); $uploads = array(); $used_names = array( $this->fold( 'project.json' ) => true, $this->fold( 'project.xlsx' ) => true, $this->fold( 'project.pdf' ) => true, $this->fold( 'mentor.xlsx' ) => true );
     foreach ( $files as $key => $f ) {
      if ( ! preg_match( '/^f_[a-f0-9]{12}$/D', $key ) || empty( $f['blob'] ) || ! preg_match( '/^[a-f0-9]{40}\\.bin$/D', $f['blob'] ) || empty( $f['ext'] ) || ! isset( WP_NTK_Project_Files::TYPES[$f['ext']] ) ) { throw new RuntimeException( 'Файл проекта или закрытое хранилище недоступны.' ); }
      $temporary = false; $path = WP_NTK_Project_Files::local_copy( $f, $temporary );
@@ -151,8 +154,26 @@ final class WP_NTK_Project_Export {
     }
     $author = get_userdata( $p->post_author );
     $info = array( 'id_проекта' => $p->ID, 'номинация' => isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom, 'номер_номинации' => $nom, 'название' => $p->post_title, 'описание' => $p->post_content, 'id_автора' => (int) $p->post_author, 'автор' => $author ? $author->display_name : '', 'email_аккаунта' => $author ? $author->user_email : '', 'дата_создания' => $p->post_date, 'файлы' => $list );
+    $project_rows = array(
+     array( 'ID проекта', (string) $p->ID ), array( 'Название проекта', $p->post_title ),
+     array( 'Номинация', $info['номинация'] ), array( 'Номер номинации', $nom ), array( 'Описание проекта', $p->post_content ),
+     array( 'Дата создания', $p->post_date ), array( 'ID наставника', (string) $p->post_author ),
+     array( 'Наставник', $author ? $author->display_name : 'Учётная запись недоступна' ), array( 'Email аккаунта', $author ? $author->user_email : '' )
+    );
+    if ( $list ) { foreach ( $list as $item ) { $project_rows[] = array( 'Вложение: ' . $item['раздел'], $item['имя_оригинала'] . ' (в папке: ' . $item['имя_в_папке'] . ')' ); } }
+    else { $project_rows[] = array( 'Вложения', 'Нет' ); }
+    $mentor_rows = array( array( 'ID наставника', (string) $p->post_author ), array( 'Имя пользователя', $author ? $author->display_name : 'Учётная запись недоступна' ), array( 'Email аккаунта', $author ? $author->user_email : '' ), array( 'Дата регистрации', $author ? $author->user_registered : '' ) );
+    $field_defs = WP_NTK_Fields::all(); $values = $author ? WP_NTK_Fields::get_values( $p->post_author ) : array();
+    foreach ( $field_defs as $field_key => $field ) { $mentor_rows[] = array( $field['label'], isset( $values[$field_key] ) ? $values[$field_key] : '' ); }
+    foreach ( array( 'project.xlsx', 'project.pdf', 'mentor.xlsx' ) as $doc_name ) {
+     $doc = WP_NTK_Project_Files::create_temp_file(); if ( ! $doc ) { throw new RuntimeException( 'Закрытый временный каталог PHP недоступен или расположен в публичной области сайта.' ); }
+     $documents[] = $doc;
+     if ( 'project.pdf' === $doc_name ) { WP_NTK_Export_Documents::pdf( $doc, $project_rows ); }
+     else { WP_NTK_Export_Documents::xlsx( $doc, 'mentor.xlsx' === $doc_name ? $mentor_rows : $project_rows, 'mentor.xlsx' === $doc_name ? 'Наставник' : 'Проект' ); }
+     $uploads[$doc_name] = $doc;
+    }
     $json = wp_json_encode( $info, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
-    $temp = tempnam( sys_get_temp_dir(), 'ntkproject_' ); if ( ! is_string( $json ) || ! $temp || ! chmod( $temp, 0600 ) || strlen( $json ) !== file_put_contents( $temp, $json ) ) { throw new RuntimeException( 'Не удалось подготовить данные проекта.' ); }
+    $temp = WP_NTK_Project_Files::create_temp_file(); if ( ! is_string( $json ) || ! $temp || strlen( $json ) !== file_put_contents( $temp, $json ) ) { throw new RuntimeException( 'Не удалось подготовить данные проекта.' ); }
     $uploads['project.json'] = $temp;
     foreach ( $uploads as $name => $local ) {
      $relative = implode( '/', $dirs ) . '/' . $name; $wanted[$relative] = 1;
@@ -165,7 +186,7 @@ final class WP_NTK_Project_Export {
      $all[$target][$relative] = 1; if ( ! $this->store_manifest( $all ) ) { throw new RuntimeException( 'Не удалось сохранить реестр выгрузки.' ); }
      if ( ! $this->put( $dirs, $name, $local ) ) { throw new RuntimeException( 'Ошибка записи файла проекта ID ' . (int) $p->ID . ' в сетевую папку. Проверьте SMB-соединение и права записи.' ); }
     }
-    @unlink( $temp ); $temp = false; foreach ( $copies as $copy ) { @unlink( $copy ); } $copies = array(); ++$count;
+    @unlink( $temp ); $temp = false; foreach ( $copies as $copy ) { @unlink( $copy ); } $copies = array(); foreach ( $documents as $doc ) { @unlink( $doc ); } $documents = array(); ++$count;
    }
    // Удаляем только известные реестру файлы, в том числе из структуры прежних версий.
    $empty_dirs = array();
@@ -185,7 +206,7 @@ final class WP_NTK_Project_Export {
    foreach ( $empty_dirs as $parts ) { if ( 1 === count( $parts ) && in_array( $parts[0], $nomination_dirs, true ) ) { continue; } $name = array_pop( $parts ); $this->command( $parts, 'rmdir "' . $name . '"' ); }
    $ok = true; $this->status( 'Синхронизация завершена. Проектов: ' . $count . '.' );
   } catch ( Throwable $e ) { $this->status( 'Ошибка синхронизации: ' . $e->getMessage() ); }
-  finally { $this->target = null; if ( $temp && is_file( $temp ) ) { @unlink( $temp ); } foreach ( $copies as $copy ) { @unlink( $copy ); } $lock = get_option( self::LOCK ); if ( is_array( $lock ) && isset( $lock['token'] ) && $token === $lock['token'] ) { delete_option( self::LOCK ); } }
+  finally { $this->target = null; if ( $temp && is_file( $temp ) ) { @unlink( $temp ); } foreach ( $copies as $copy ) { @unlink( $copy ); } foreach ( $documents as $doc ) { @unlink( $doc ); } $lock = get_option( self::LOCK ); if ( is_array( $lock ) && isset( $lock['token'] ) && $token === $lock['token'] ) { delete_option( self::LOCK ); } }
   return $ok;
  }
 }
