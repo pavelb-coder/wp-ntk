@@ -12,7 +12,6 @@ final class WP_NTK_Project_Files {
   add_action( 'admin_post_wp_ntk_file_sections', array( $this, 'save_sections' ) );
   add_action( 'admin_post_wp_ntk_delete_file_section', array( $this, 'delete_section' ) );
   add_action( 'admin_post_wp_ntk_project_download', array( $this, 'download' ) );
-  add_action( 'admin_post_wp_ntk_file_diagnostics', array( $this, 'diagnose_project' ) );
   add_action( 'before_delete_post', array( $this, 'delete_project_files' ), 10, 2 );
  }
  public static function sections() { $v = get_option( self::OPTION, array() ); return is_array( $v ) ? $v : array(); }
@@ -87,9 +86,6 @@ final class WP_NTK_Project_Files {
   echo '<hr><h2>Добавить раздел</h2><p>Оставьте название пустым, если не добавляете раздел.</p>'; $this->row( 'new_section', array( 'name' => '', 'max' => 10, 'required' => 0, 'active' => 1, 'types' => array( 'pdf' ) ) );
   submit_button( 'Сохранить разделы' ); echo '</form>';
   foreach ( $sections as $key => $section ) { echo '<form id="wp-ntk-delete-' . esc_attr( $key ) . '" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_delete_file_section"><input type="hidden" name="section" value="' . esc_attr( $key ) . '">'; wp_nonce_field( 'wp_ntk_delete_file_section_' . $key ); echo '</form>'; }
-  echo '<hr><h2>Диагностика чтения вложений</h2><p>Проверка не изменяет оригиналы или сетевую выгрузку. Для SMB временно создаётся закрытая копия файла и затем удаляется.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_file_diagnostics">'; wp_nonce_field( 'wp_ntk_file_diagnostics' ); echo '<label>ID проекта <input name="project_id" type="number" min="1" required></label> <button class="button">Проверить вложения</button></form>';
-  $diagnosis = get_transient( 'wp_ntk_file_diagnosis_' . get_current_user_id() );
-  if ( is_array( $diagnosis ) && isset( $diagnosis['id'], $diagnosis['lines'] ) && is_array( $diagnosis['lines'] ) ) { echo '<h3>Результат проверки проекта ID ' . (int) $diagnosis['id'] . '</h3><ul>'; foreach ( $diagnosis['lines'] as $line ) { echo '<li>' . esc_html( $line ) . '</li>'; } echo '</ul><p>Результат относится к моменту проверки. Не отправляйте пароли и содержимое файлов.</p>'; }
   $export = new WP_NTK_Project_Export( new WP_NTK_Network() ); $export->render_settings();
   echo '</div>';
  }
@@ -168,47 +164,6 @@ final class WP_NTK_Project_Files {
   }
   $root = self::root(); if ( ! $root ) { return false; }
   $path = $root . DIRECTORY_SEPARATOR . $f['blob']; return is_file( $path ) && ! is_link( $path ) && is_readable( $path ) ? $path : false;
- }
- /** Проверка только для администратора: исходные файлы не меняются. */
- public function diagnose_project() {
-  $this->allowed(); check_admin_referer( 'wp_ntk_file_diagnostics' );
-  $raw = isset( $_POST['project_id'] ) && is_string( $_POST['project_id'] ) ? wp_unslash( $_POST['project_id'] ) : '';
-  if ( ! ctype_digit( $raw ) || (int) $raw < 1 ) { wp_die( 'Укажите корректный ID проекта.', '', array( 'response' => 400 ) ); }
-  $id = (int) $raw; $post = get_post( $id );
-  if ( ! $post || WP_NTK_Projects::TYPE !== $post->post_type || ! in_array( $post->post_status, array( 'private', 'trash' ), true ) ) { wp_die( 'Проект не найден.', '', array( 'response' => 404 ) ); }
-  $lines = array(); $files = self::files( $id );
-  if ( ! $files ) { $lines[] = 'В проекте нет зарегистрированных вложений.'; }
-  foreach ( $files as $key => $file ) {
-   $label = self::section_label( $key, is_array( $file ) ? $file : array() );
-   $prefix = 'Раздел «' . $label . '»: ';
-   if ( ! is_array( $file ) || empty( $file['blob'] ) || ! self::valid_blob( $file['blob'] ) ) { $lines[] = $prefix . 'некорректная запись о файле в базе.'; continue; }
-   if ( isset( $file['storage'] ) && 'smb' === $file['storage'] ) {
-    if ( empty( $file['target'] ) || self::target() !== $file['target'] ) { $lines[] = $prefix . 'путь SMB отличается от пути, использованного при загрузке файла.'; continue; }
-    if ( ! self::smb_ready( false, $file['target'] ) ) { $lines[] = $prefix . 'закрытая папка wp-ntk-private/site-' . (int) get_current_blog_id() . ' недоступна для чтения; проверьте наличие папки и права SMB.'; continue; }
-    $tmp = self::temporary();
-    if ( ! $tmp ) {
-     $temp_dir = realpath( sys_get_temp_dir() ); $doc = ! empty( $_SERVER['DOCUMENT_ROOT'] ) ? realpath( $_SERVER['DOCUMENT_ROOT'] ) : false;
-     if ( ! $doc ) { $reason = 'DOCUMENT_ROOT не задан или не существует'; }
-     elseif ( ! $temp_dir ) { $reason = 'временный каталог PHP не существует или недоступен'; }
-     else { $reason = 'временный каталог PHP не прошёл проверку расположения или прав, либо не удалось создать в нём файл'; }
-     $lines[] = $prefix . 'SMB-папка доступна, но закрытый временный файл создать нельзя: ' . $reason . '.'; continue;
-    }
-    try {
-     $net = new WP_NTK_Network(); $state = $net->project_command( self::smb_dirs(), 'ls "' . $file['blob'] . '"', true, $file['target'] );
-     if ( 'missing' === $state ) { $lines[] = $prefix . 'запись есть в базе, но файл не найден в закрытой SMB-папке.'; }
-     elseif ( 'unknown' === $state ) { $lines[] = $prefix . 'не удалось проверить наличие файла в SMB (возможны ошибка соединения или прав).'; }
-     elseif ( ! $net->project_command( self::smb_dirs(), 'get "' . $file['blob'] . '" "' . $tmp . '"', false, $file['target'] ) || ! is_readable( $tmp ) ) { $lines[] = $prefix . 'файл виден в SMB, но прочитать его не удалось; проверьте права чтения и доступность временного каталога.'; }
-     else { $lines[] = $prefix . 'чтение из SMB успешно.'; }
-    } finally { @unlink( $tmp ); }
-   } else {
-    $root = self::root();
-    if ( ! $root ) { $lines[] = $prefix . 'прежняя локальная папка WP_NTK_PRIVATE_DIR не настроена или недоступна.'; }
-    elseif ( ! is_file( $root . DIRECTORY_SEPARATOR . $file['blob'] ) || is_link( $root . DIRECTORY_SEPARATOR . $file['blob'] ) || ! is_readable( $root . DIRECTORY_SEPARATOR . $file['blob'] ) ) { $lines[] = $prefix . 'локальный файл отсутствует или недоступен для чтения.'; }
-    else { $lines[] = $prefix . 'локальный файл доступен для чтения.'; }
-   }
-  }
-  set_transient( 'wp_ntk_file_diagnosis_' . get_current_user_id(), array( 'id' => $id, 'lines' => $lines ), 10 * MINUTE_IN_SECONDS );
-  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-project-files' ) ); exit;
  }
  /** Удаление одного необязательного вложения; сохранение метаданных предшествует удалению копии. */
  public static function delete_one( $id, $key, $blob ) {
