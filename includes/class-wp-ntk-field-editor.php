@@ -60,6 +60,9 @@ final class WP_NTK_Field_Editor {
   ?>
   <div class="wrap"><h1>Поля регистрации</h1>
   <?php if ( isset( $_GET['updated'] ) ) : ?><div class="notice notice-success"><p>Поля сохранены.</p></div><?php endif; ?>
+  <?php if ( isset( $_GET['registration_saved'] ) ) : ?><div class="notice notice-success"><p>Настройки регистрации сохранены.</p></div><?php endif; ?>
+  <?php $panel = new WP_NTK_Panel(); $panel->render_registration_settings(); ?>
+  <hr><h2>Поля анкеты наставника</h2>
   <p>Поля анкеты отображаются при регистрации, в личном кабинете и профиле пользователя. Email для входа, пароль и согласие на обработку данных — отдельные обязательные поля.</p>
   <p>Меньший номер означает более раннее положение. Удаление дополнительного поля убирает его из форм, но не удаляет сохранённые данные пользователей. При изменении вариантов списка пользователям может потребоваться выбрать новый вариант.</p>
   <?php if ( $page ) : ?><p><a class="button" href="<?php echo esc_url( get_edit_post_link( $page ) ); ?>">Редактировать страницу и добавить блоки</a> <span>Добавьте блоки до или после шорткода <code>[wp_ntk_account]</code>. Они появятся и на других экранах кабинета.</span></p><?php endif; ?>

@@ -27,7 +27,7 @@ final class WP_NTK_Panel {
   update_option( WP_NTK_Protection::LIMIT_OPTION, empty( $_POST['wp_ntk_limit_enabled'] ) ? '0' : '1' );
   update_option( 'wp_ntk_consent_text', $text );
   update_option( 'wp_ntk_consent_url', $url );
-  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk&updated=1' ) ); exit;
+  wp_safe_redirect( admin_url( 'admin.php?page=wp-ntk-fields&registration_saved=1' ) ); exit;
  }
  public function export() {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Недостаточно прав.', 'wp-ntk' ) ); }
@@ -55,19 +55,10 @@ final class WP_NTK_Panel {
   } while ( count( $users ) === 200 );
   fclose( $out ); exit;
  }
- public function page() {
+ /** Отдельная форма настроек регистрации, используется на странице полей. */
+ public function render_registration_settings() {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Недостаточно прав.', 'wp-ntk' ) ); }
-  $search = isset( $_GET['s'] ) && is_string( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
-  $paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
-  $args = array( 'role__in' => array( WP_NTK_Setup::ROLE, 'subscriber' ), 'number' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC', 'count_total' => true );
-  if ( $search ) { $args['search'] = '*' . $search . '*'; $args['search_columns'] = array( 'user_login', 'user_email', 'display_name' ); }
-  $query = new WP_User_Query( $args );
-  $page_id = WP_NTK_Setup::account_page_id();
   ?>
-  <div class="wrap"><h1>WP NTK — управление</h1>
-  <?php if ( isset( $_GET['updated'] ) ) : ?><div class="notice notice-success is-dismissible"><p>Настройки сохранены.</p></div><?php endif; ?>
-  <h2>Личный кабинет</h2>
-  <?php if ( $page_id ) : ?><p><a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Открыть страницу кабинета</a> | <a href="<?php echo esc_url( get_edit_post_link( $page_id ) ); ?>">Редактировать страницу</a></p><?php else : ?><p>Опубликованная страница кабинета не найдена. Добавьте шорткод <code>[wp_ntk_account]</code> на страницу.</p><?php endif; ?>
   <h2>Регистрация</h2><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
   <input type="hidden" name="action" value="wp_ntk_settings"><?php wp_nonce_field( 'wp_ntk_settings' ); ?>
   <p><label><input type="checkbox" name="wp_ntk_closed" value="1" <?php checked( get_option( self::CLOSED_OPTION ), '1' ); ?>> Закрыть регистрацию новых наставников</label></p><p class="description">Вход существующих пользователей останется доступен. По окончании периода приёма проектов регистрация новых пользователей также закрывается автоматически, независимо от этого переключателя. Если срок приёма продлён, регистрация снова откроется, если не закрыта вручную.</p>
@@ -80,6 +71,20 @@ final class WP_NTK_Panel {
   <p><label for="wp-ntk-consent-url">Ссылка на документ (необязательно)</label><br><input id="wp-ntk-consent-url" name="wp_ntk_consent_url" class="regular-text" type="url" placeholder="https://example.org/document" value="<?php echo esc_attr( WP_NTK_Setup::consent_url() ); ?>"></p>
   <p class="description">Проверьте текст и документ с юристом. Согласие обязательно для новых регистраций. Существующие пользователи повторно не запрашиваются.</p>
   <?php submit_button(); ?></form>
+  <?php
+ }
+ public function page() {
+  if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Недостаточно прав.', 'wp-ntk' ) ); }
+  $search = isset( $_GET['s'] ) && is_string( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '';
+  $paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+  $args = array( 'role__in' => array( WP_NTK_Setup::ROLE, 'subscriber' ), 'number' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC', 'count_total' => true );
+  if ( $search ) { $args['search'] = '*' . $search . '*'; $args['search_columns'] = array( 'user_login', 'user_email', 'display_name' ); }
+  $query = new WP_User_Query( $args );
+  $page_id = WP_NTK_Setup::account_page_id();
+  ?>
+  <div class="wrap"><h1>WP NTK — управление</h1>
+  <h2>Личный кабинет</h2>
+  <?php if ( $page_id ) : ?><p><a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Открыть страницу кабинета</a> | <a href="<?php echo esc_url( get_edit_post_link( $page_id ) ); ?>">Редактировать страницу</a></p><?php else : ?><p>Опубликованная страница кабинета не найдена. Добавьте шорткод <code>[wp_ntk_account]</code> на страницу.</p><?php endif; ?>
   <h2>Наставники</h2><p>В список включены пользователи с ролью «Наставник проекта» или «Подписчик».</p><p>Всего найдено: <?php echo (int) $query->get_total(); ?></p>
   <form method="get"><input type="hidden" name="page" value="wp-ntk"><label for="wp-ntk-search">Поиск по имени, логину или email</label> <input id="wp-ntk-search" name="s" value="<?php echo esc_attr( $search ); ?>"> <button class="button">Найти</button></form>
   <p><a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wp_ntk_export' ), 'wp_ntk_export' ) ); ?>">Выгрузить всех наставников в CSV</a></p>

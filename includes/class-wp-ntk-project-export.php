@@ -29,7 +29,7 @@ final class WP_NTK_Project_Export {
  public function page() { $this->allowed(); $page = new WP_NTK_Project_Files(); $page->page(); }
  public function render_settings() {
   $this->allowed(); $c = $this->config(); $status = get_option( self::STATUS, array() );
-  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/Название проекта</code>. Имена проектов и файлов сохраняются по возможности; недопустимые символы заменяются, длинные имена сокращаются, а при совпадениях добавляется суффикс. В каждой папке — данные проекта в XLSX и PDF, анкета наставника в XLSX и вложения. Для создания XLSX нужны ZipArchive, для PDF — iconv и zlib. Временная папка PHP должна быть недоступна по HTTP. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
+  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/Название проекта</code>. Имена проектов и файлов сохраняются по возможности; недопустимые символы заменяются, длинные имена сокращаются, совпадающие названия номинаций объединяются в одну папку, а при совпадениях названий проектов добавляется суффикс. В каждой папке — данные проекта в XLSX и PDF, анкета наставника в XLSX и вложения. Для создания XLSX нужны ZipArchive, для PDF — iconv и zlib. Временная папка PHP должна быть недоступна по HTTP. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
   echo '<p><strong>Важно:</strong> выгрузка содержит персональные данные и копии закрытых вложений. Доступ к сетевой папке настраивается отдельно от WordPress: разрешите его только уполномоченным лицам. Изменённые и удалённые вложения, а также проекты из корзины удаляются из выгрузки при успешной синхронизации; посторонние файлы плагин не удаляет. Используйте выделенную папку исключительно для этого сайта: зарезервированные имена файлов нельзя занимать вручную. Пустые папки могут остаться. Копии в резервных архивах не удаляются. При сбое возможна неполная выгрузка; проверяйте результат и делайте резервные копии.</p>';
   echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_export_settings">'; wp_nonce_field( 'wp_ntk_project_export_settings' );
   echo '<p><label><input type="checkbox" name="auto" value="1" ' . checked( ! empty( $c['auto'] ), true, false ) . '> Автоматически после изменения проекта и по расписанию</label></p><p><label>Периодичность: <select name="interval">';
@@ -88,14 +88,12 @@ final class WP_NTK_Project_Export {
    if ( '' === $name || preg_match( '/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $name ) || in_array( strtolower( $name ), array( 'wp-ntk-private', 'wp-ntk-projects' ), true ) ) { $name = 'Номинация ' . $i; }
    preg_match_all( '/./us', $name, $chars ); $name = ''; foreach ( $chars[0] as $char ) { if ( strlen( $name . $char ) > 170 ) { break; } $name .= $char; }
    $name = rtrim( $name, ' .' ); if ( '' === $name ) { $name = 'Номинация ' . $i; }
-   $candidate = $name; $suffix = 0;
-   do {
-    $folded = function_exists( 'mb_strtolower' ) ? mb_strtolower( $candidate, 'UTF-8' ) : strtolower( strtr( $candidate, array_combine( preg_split( '//u', 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', -1, PREG_SPLIT_NO_EMPTY ), preg_split( '//u', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя', -1, PREG_SPLIT_NO_EMPTY ) ) ) );
-    if ( ! isset( $used[$folded] ) ) { break; }
-    $candidate = $name . ' (' . $i . ( $suffix ? '-' . $suffix : '' ) . ')'; ++$suffix;
-   } while ( true );
+   $folded = $this->fold( $name );
+   // Совпадающие после очистки имена используют один и тот же каталог.
+   if ( ! isset( $used[$folded] ) ) { $used[$folded] = $name; }
+   $candidate = $used[$folded];
    if ( ! WP_NTK_Network::valid_project_dir( $candidate ) ) { throw new RuntimeException( 'Некорректное название папки номинации.' ); }
-   $used[$folded] = true; $result[(string) $i] = $candidate;
+   $result[(string) $i] = $candidate;
   }
   return $result;
  }
@@ -116,15 +114,24 @@ final class WP_NTK_Project_Export {
   $lower = preg_split( '//u', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя', -1, PREG_SPLIT_NO_EMPTY );
   return strtolower( strtr( $name, array_combine( $upper, $lower ) ) );
  }
- private function project_dirs( $projects ) {
-  $used = array(); $out = array();
+ private function project_dirs( $projects, $nomination_dirs ) {
+  $used = array(); $out = array(); $cross_nomination = array();
+  foreach ( $projects as $p ) {
+   $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true );
+   if ( ! isset( $nomination_dirs[$nom] ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' неизвестная номинация.' ); }
+   $group = $this->fold( $nomination_dirs[$nom] ); $title = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
+   $cross_nomination[$group][$this->fold( $title )][$nom] = true;
+  }
   foreach ( $projects as $p ) {
    $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true );
    if ( ! ctype_digit( $nom ) || (int) $nom < 1 ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' некорректная номинация.' ); }
-   $title = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
-   $candidate = $title; $n = 0;
-   while ( isset( $used[$nom][$this->fold( $candidate )] ) ) { $candidate = $title . ' (ID ' . (int) $p->ID . ( $n ? '-' . $n : '' ) . ')'; ++$n; }
-   $used[$nom][$this->fold( $candidate )] = true; $out[(int) $p->ID] = $candidate;
+   if ( ! isset( $nomination_dirs[$nom] ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' неизвестная номинация.' ); }
+   $group = $this->fold( $nomination_dirs[$nom] ); $title = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
+   // При слиянии номинаций не перезаписываем прежнюю папку другого проекта с тем же названием.
+   $cross = count( $cross_nomination[$group][$this->fold( $title )] ) > 1;
+   $candidate = $cross ? $title . ' (ID ' . (int) $p->ID . ')' : $title; $n = 0;
+   while ( isset( $used[$group][$this->fold( $candidate )] ) ) { $candidate = $title . ' (ID ' . (int) $p->ID . ( $n ? '-' . $n : '' ) . ')'; ++$n; }
+   $used[$group][$this->fold( $candidate )] = true; $out[(int) $p->ID] = $candidate;
   }
   return $out;
  }
@@ -152,7 +159,7 @@ final class WP_NTK_Project_Export {
    $projects = get_posts( array( 'post_type' => WP_NTK_Projects::TYPE, 'post_status' => 'private', 'numberposts' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'suppress_filters' => true ) );
    $conf = get_option( WP_NTK_Projects::OPTION, array() ); $active_names = isset( $conf['nominations'] ) && is_array( $conf['nominations'] ) ? $conf['nominations'] : array( 1 => 'Номинация 1', 2 => 'Номинация 2', 3 => 'Номинация 3', 4 => 'Номинация 4' ); $names = array_replace( isset( $conf['retired_nominations'] ) && is_array( $conf['retired_nominations'] ) ? $conf['retired_nominations'] : array(), $active_names ); $nomination_dirs = $this->nomination_dirs( $names );
    foreach ( $active_names as $active_id => $unused ) { $dir = $nomination_dirs[$active_id]; if ( ! $this->ensure_dirs( array( $dir ) ) ) { throw new RuntimeException( 'Не удалось создать папку номинации. Проверьте подключение и права.' ); } }
-   $project_dirs = $this->project_dirs( $projects );
+   $project_dirs = $this->project_dirs( $projects, $nomination_dirs );
    foreach ( $projects as $p ) {
     $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); if ( ! ctype_digit( $nom ) || ! isset( $nomination_dirs[$nom] ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' неизвестная номинация. Проверьте настройки.' ); }
     $dirs = array( $nomination_dirs[$nom], $project_dirs[(int) $p->ID] );
