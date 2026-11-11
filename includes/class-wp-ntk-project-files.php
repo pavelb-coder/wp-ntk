@@ -187,7 +187,10 @@ final class WP_NTK_Project_Files {
    if ( UPLOAD_ERR_NO_FILE === $err ) { if ( $remove && isset( $files[$key] ) ) { if ( ! self::storage_ready( $files[$key] ) ) { $errors[] = 'Хранилище файла недоступно. Обратитесь к администратору.'; } else { $retired[] = $files[$key]; unset( $files[$key] ); } } }
    elseif ( UPLOAD_ERR_OK !== $err ) { $errors[] = 'Ошибка загрузки файла: ' . $section['name'] . '.'; }
    else {
-    $name = isset( $u['name'][$key] ) && is_string( $u['name'][$key] ) ? sanitize_file_name( wp_unslash( $u['name'][$key] ) ) : '';
+    // Сохраняем исходное имя отдельно от случайного имени закрытого файла.
+    $name = isset( $u['name'][$key] ) && is_string( $u['name'][$key] ) ? wp_check_invalid_utf8( wp_unslash( $u['name'][$key] ) ) : '';
+    $name = preg_replace( '/[\x00-\x1f\x7f]/u', '', str_replace( array( '/', '\\' ), '_', $name ) );
+    if ( ! is_string( $name ) || strlen( $name ) > 255 ) { $name = ''; }
     $tmp = isset( $u['tmp_name'][$key] ) && is_string( $u['tmp_name'][$key] ) ? $u['tmp_name'][$key] : '';
     $size = $tmp && is_uploaded_file( $tmp ) ? filesize( $tmp ) : false;
     $ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ); if ( 'jpeg' === $ext ) { $ext = 'jpg'; }

@@ -118,6 +118,15 @@ final class WP_NTK_Network {
  public static function valid_project_dir( $dir ) {
   return is_string( $dir ) && '' !== $dir && strlen( $dir ) <= 200 && 1 === preg_match( '//u', $dir ) && '.' !== $dir && '..' !== $dir && ! preg_match( '/[\x00-\x1f\x7f\\\\\/:*?"<>|;]/u', $dir ) && ! preg_match( '/[. ]$/u', $dir );
  }
+ /** Имена файлов могут содержать слова error и failed; это не признаки ошибки smbclient. */
+ private function project_output_failed( $output ) {
+  foreach ( preg_split( '/[\r\n]+/', $output ) as $line ) {
+   // Успешные сообщения и строки списка содержат имена файлов, которые не являются диагностикой.
+   if ( preg_match( '/^\s*(?:putting file |getting file )/i', $line ) || preg_match( '/^\s+.+\s+[ADHRS]+\s+\d+\s+\w{3}\s+\w{3}\s+\d+/i', $line ) ) { continue; }
+   if ( preg_match( '/NT_STATUS_|ERRDOS|ERRSRV|^\s*(?:error:|failed to |connection to .* failed|protocol negotiation failed|session setup failed)|timed out/i', $line ) ) { return true; }
+  }
+  return false;
+ }
  /** Операция в выделенной подпапке проектов; команды и имена формируются самим плагином. */
  public function project_command( $dirs, $command, $probe = false, $expected_target = null ) {
   $c = $this->config();
@@ -140,9 +149,9 @@ final class WP_NTK_Network {
    fclose( $pipes[0] ); stream_set_blocking( $pipes[1], false ); stream_set_blocking( $pipes[2], false ); $output = ''; $deadline = microtime( true ) + 60; $exit = -1;
    do { $output .= stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] ); $state = proc_get_status( $proc ); if ( ! $state['running'] ) { $exit = $state['exitcode']; break; } if ( microtime( true ) > $deadline ) { proc_terminate( $proc, 9 ); break; } usleep( 100000 ); } while ( true );
    $output .= stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] ); fclose( $pipes[1] ); fclose( $pipes[2] ); proc_close( $proc );
-   if ( $probe ) { if ( 0 === $exit && ! preg_match( '/NT_STATUS_|ERRDOS|ERRSRV|failed|error|timed out/i', $output ) ) { return 'exists'; } if ( preg_match( '/NT_STATUS_(?:NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)/', $output ) && ! preg_match( '/NT_STATUS_(?!NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)[A-Z_]+|ERRDOS|ERRSRV|timed out/i', $output ) ) { return 'missing'; } return 'unknown'; }
+   if ( $probe ) { if ( 0 === $exit && ! $this->project_output_failed( $output ) ) { return 'exists'; } if ( preg_match( '/NT_STATUS_(?:NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)/', $output ) && ! preg_match( '/NT_STATUS_(?!NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)[A-Z_]+|ERRDOS|ERRSRV|timed out/i', $output ) ) { return 'missing'; } return 'unknown'; }
    if ( 0 === strpos( $command, 'del ' ) && preg_match( '/NT_STATUS_(?:NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)/', $output ) && ! preg_match( '/NT_STATUS_(?!NO_SUCH_FILE|OBJECT_NAME_NOT_FOUND)[A-Z_]+|ERRDOS|ERRSRV|timed out/i', $output ) ) { return true; }
-   return 0 === $exit && ! preg_match( '/NT_STATUS_|ERRDOS|ERRSRV|failed|error|timed out/i', $output );
+   return 0 === $exit && ! $this->project_output_failed( $output );
   } finally { @unlink( $auth ); }
  }
  /** Запускает smbclient без оболочки и без пароля в аргументах процесса. */

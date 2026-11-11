@@ -24,7 +24,7 @@ final class WP_NTK_Project_Export {
  public function page() { $this->allowed(); $page = new WP_NTK_Project_Files(); $page->page(); }
  public function render_settings() {
   $this->allowed(); $c = $this->config(); $status = get_option( self::STATUS, array() );
-  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/project-ID</code>. Запрещённые в именах символы заменяются; при совпадении имён добавляется номер. В каждой папке — данные проекта в UTF-8 JSON и файлы, имена которых указаны в JSON. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
+  echo '<section id="wp-ntk-export"><hr><h2>Экспорт проектов в SMB</h2><p>Используются настройки подключения из раздела «Сетевая папка». Папки номинаций создаются прямо в этой папке по названиям из настроек проектов: <code>Название номинации/Название проекта</code>. Имена проектов и файлов сохраняются по возможности; недопустимые символы заменяются, длинные имена сокращаются, а при совпадениях добавляется суффикс. В каждой папке — данные проекта в UTF-8 JSON и файлы, имена которых указаны в JSON. Папка <code>wp-ntk-private</code> — основное хранилище, она не является экспортом и не копируется при выгрузке.</p>';
   echo '<p><strong>Важно:</strong> выгрузка содержит персональные данные и копии закрытых вложений. Доступ к сетевой папке настраивается отдельно от WordPress: разрешите его только уполномоченным лицам. Изменённые и удалённые вложения, а также проекты из корзины удаляются из выгрузки при успешной синхронизации; посторонние файлы плагин не удаляет. Используйте выделенную папку исключительно для этого сайта: зарезервированные имена файлов нельзя занимать вручную. Пустые папки могут остаться. Копии в резервных архивах не удаляются. При сбое возможна неполная выгрузка; проверяйте результат и делайте резервные копии.</p>';
   echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_project_export_settings">'; wp_nonce_field( 'wp_ntk_project_export_settings' );
   echo '<p><label><input type="checkbox" name="auto" value="1" ' . checked( ! empty( $c['auto'] ), true, false ) . '> Автоматически после изменения проекта и по расписанию</label></p><p><label>Периодичность: <select name="interval">';
@@ -57,7 +57,7 @@ final class WP_NTK_Project_Export {
   return true;
  }
  private function put( $dirs, $name, $file ) {
-  if ( ! preg_match( '/^[A-Za-z0-9_.-]+$/D', $name ) || false !== strpbrk( $file, "\";\\\r\n" ) || ! is_file( $file ) || is_link( $file ) || ! is_readable( $file ) ) { return false; }
+  if ( ! WP_NTK_Network::valid_project_dir( $name ) || false !== strpbrk( $file, "\";\\\r\n" ) || ! is_file( $file ) || is_link( $file ) || ! is_readable( $file ) ) { return false; }
   return $this->command( $dirs, 'put "' . $file . '" "' . $name . '"' );
  }
  /** Названия безопасны для Windows и команд smbclient; длина ограничена байтами UTF-8. */
@@ -82,6 +82,45 @@ final class WP_NTK_Project_Export {
   }
   return $result;
  }
+ /** Сохраняем читаемые имена, исключая запрещённые SMB-символы и управляющие коды. */
+ private function safe_component( $name, $fallback, $limit = 170 ) {
+  $name = is_string( $name ) ? preg_replace( '/[\x00-\x1f\x7f\\\\\/:*?"<>|;]/u', '_', $name ) : '';
+  if ( ! is_string( $name ) ) { throw new RuntimeException( 'Некорректная кодировка имени.' ); }
+  $name = trim( $name, " .\t\r\n" );
+  if ( '' === $name || preg_match( '/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $name ) ) { $name = $fallback; }
+  preg_match_all( '/./us', $name, $chars ); $result = ''; foreach ( $chars[0] as $char ) { if ( strlen( $result . $char ) > $limit ) { break; } $result .= $char; }
+  $result = rtrim( $result, ' .' ); if ( '' === $result ) { $result = $fallback; }
+  if ( ! WP_NTK_Network::valid_project_dir( $result ) ) { throw new RuntimeException( 'Недопустимое имя файла или папки.' ); }
+  return $result;
+ }
+ private function fold( $name ) {
+  if ( function_exists( 'mb_strtolower' ) ) { return mb_strtolower( $name, 'UTF-8' ); }
+  $upper = preg_split( '//u', 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', -1, PREG_SPLIT_NO_EMPTY );
+  $lower = preg_split( '//u', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя', -1, PREG_SPLIT_NO_EMPTY );
+  return strtolower( strtr( $name, array_combine( $upper, $lower ) ) );
+ }
+ private function project_dirs( $projects ) {
+  $used = array(); $out = array();
+  foreach ( $projects as $p ) {
+   $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true );
+   if ( ! in_array( $nom, array( '1', '2', '3', '4' ), true ) ) { throw new RuntimeException( 'У проекта ID ' . (int) $p->ID . ' некорректная номинация.' ); }
+   $title = $this->safe_component( $p->post_title, 'Проект ' . (int) $p->ID, 160 );
+   $candidate = $title; $n = 0;
+   while ( isset( $used[$nom][$this->fold( $candidate )] ) ) { $candidate = $title . ' (ID ' . (int) $p->ID . ( $n ? '-' . $n : '' ) . ')'; ++$n; }
+   $used[$nom][$this->fold( $candidate )] = true; $out[(int) $p->ID] = $candidate;
+  }
+  return $out;
+ }
+ private function export_filename( $f, $key, &$used ) {
+  $ext = $f['ext']; $source = isset( $f['name'] ) && is_string( $f['name'] ) ? $f['name'] : '';
+  $original_ext = pathinfo( $source, PATHINFO_EXTENSION );
+  if ( strtolower( $original_ext ) === $ext || ( 'jpg' === $ext && 'jpeg' === strtolower( $original_ext ) ) ) { $suffix = '.' . $original_ext; $stem = substr( $source, 0, -strlen( $suffix ) ); }
+  else { $suffix = '.' . $ext; $stem = $source; }
+  $stem = $this->safe_component( $stem, 'file-' . $key, 160 ); $name = $stem . $suffix; $i = 2;
+  while ( isset( $used[$this->fold( $name )] ) ) { $name = $stem . ' (' . $i++ . ')' . $suffix; }
+  if ( ! WP_NTK_Network::valid_project_dir( $name ) ) { throw new RuntimeException( 'Некорректное имя вложения.' ); }
+  $used[$this->fold( $name )] = true; return $name;
+ }
  private function store_manifest( $all ) { update_option( self::MANIFEST, $all, false ); return get_option( self::MANIFEST ) === $all; }
  private function export() {
   $old = get_option( self::LOCK ); if ( is_array( $old ) && ! empty( $old['time'] ) && (int) $old['time'] < time() - 3600 ) { delete_option( self::LOCK ); }
@@ -96,16 +135,18 @@ final class WP_NTK_Project_Export {
    $projects = get_posts( array( 'post_type' => WP_NTK_Projects::TYPE, 'post_status' => 'private', 'numberposts' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'suppress_filters' => true ) );
    $conf = get_option( WP_NTK_Projects::OPTION, array() ); $names = isset( $conf['nominations'] ) && is_array( $conf['nominations'] ) ? $conf['nominations'] : array(); $nomination_dirs = $this->nomination_dirs( $names );
    foreach ( $nomination_dirs as $dir ) { if ( ! $this->ensure_dirs( array( $dir ) ) ) { throw new RuntimeException( 'Не удалось создать папку номинации. Проверьте подключение и права.' ); } }
+   $project_dirs = $this->project_dirs( $projects );
    foreach ( $projects as $p ) {
     $nom = (string) get_post_meta( $p->ID, '_wp_ntk_nomination', true ); if ( ! in_array( $nom, array( '1','2','3','4' ), true ) ) { throw new RuntimeException( 'У проекта некорректная номинация.' ); }
-    $dirs = array( $nomination_dirs[$nom], 'project-' . (int) $p->ID );
+    $dirs = array( $nomination_dirs[$nom], $project_dirs[(int) $p->ID] );
     if ( ! $this->ensure_dirs( $dirs ) ) { throw new RuntimeException( 'Не удалось создать папку проекта.' ); }
-    $files = WP_NTK_Project_Files::files( $p->ID ); $list = array(); $uploads = array();
+    $files = WP_NTK_Project_Files::files( $p->ID ); ksort( $files ); $list = array(); $uploads = array(); $used_names = array();
     foreach ( $files as $key => $f ) {
      if ( ! preg_match( '/^f_[a-f0-9]{12}$/D', $key ) || empty( $f['blob'] ) || ! preg_match( '/^[a-f0-9]{40}\\.bin$/D', $f['blob'] ) || empty( $f['ext'] ) || ! isset( WP_NTK_Project_Files::TYPES[$f['ext']] ) ) { throw new RuntimeException( 'Файл проекта или закрытое хранилище недоступны.' ); }
-     $temporary = false; $path = WP_NTK_Project_Files::local_copy( $f, $temporary ); $remote = 'file-' . $key . '.' . $f['ext'];
-     if ( ! $path ) { throw new RuntimeException( 'Файл проекта недоступен.' ); }
+     $temporary = false; $path = WP_NTK_Project_Files::local_copy( $f, $temporary );
+     if ( ! $path ) { throw new RuntimeException( 'Не удалось прочитать вложение проекта ID ' . (int) $p->ID . '. Проверьте доступ к SMB-хранилищу и закрытому временному каталогу PHP.' ); }
      if ( $temporary ) { $copies[] = $path; }
+     $remote = $this->export_filename( $f, $key, $used_names );
      $uploads[$remote] = $path; $list[] = array( 'раздел' => WP_NTK_Project_Files::section_label( $key, $f ), 'имя_оригинала' => isset( $f['name'] ) ? $f['name'] : '', 'имя_в_папке' => $remote );
     }
     $author = get_userdata( $p->post_author );
@@ -122,7 +163,7 @@ final class WP_NTK_Project_Export {
      }
      // Сначала записываем намерение: даже при обрыве передачи файл можно будет очистить позже.
      $all[$target][$relative] = 1; if ( ! $this->store_manifest( $all ) ) { throw new RuntimeException( 'Не удалось сохранить реестр выгрузки.' ); }
-     if ( ! $this->put( $dirs, $name, $local ) ) { throw new RuntimeException( 'Ошибка записи файла в сетевую папку.' ); }
+     if ( ! $this->put( $dirs, $name, $local ) ) { throw new RuntimeException( 'Ошибка записи файла проекта ID ' . (int) $p->ID . ' в сетевую папку. Проверьте SMB-соединение и права записи.' ); }
     }
     @unlink( $temp ); $temp = false; foreach ( $copies as $copy ) { @unlink( $copy ); } $copies = array(); ++$count;
    }
@@ -131,9 +172,9 @@ final class WP_NTK_Project_Export {
    foreach ( $all[$target] as $relative => $unused ) {
     if ( isset( $wanted[$relative] ) ) { continue; }
     $parts = explode( '/', $relative ); $name = array_pop( $parts );
-    $file_ok = (bool) preg_match( '/^(?:project\.json|file-f_[a-f0-9]{12}\.(?:pdf|docx|xlsx|pptx|jpg|png))$/D', $name );
+    $file_ok = WP_NTK_Network::valid_project_dir( $name ) && ( 'project.json' === $name || (bool) preg_match( '/\.(?:pdf|docx|xlsx|pptx|jpe?g|png)$/iD', $name ) );
     $old_ok = 4 === count( $parts ) && $parts[0] === $old_base[0] && $parts[1] === $old_base[1] && preg_match( '/^nomination-[1-4]$/D', $parts[2] ) && preg_match( '/^project-[0-9]+$/D', $parts[3] );
-    $new_ok = 2 === count( $parts ) && WP_NTK_Network::valid_project_dir( $parts[0] ) && ! in_array( strtolower( $parts[0] ), array( 'wp-ntk-private', 'wp-ntk-projects' ), true ) && preg_match( '/^project-[0-9]+$/D', $parts[1] );
+    $new_ok = 2 === count( $parts ) && WP_NTK_Network::valid_project_dir( $parts[0] ) && ! in_array( strtolower( $parts[0] ), array( 'wp-ntk-private', 'wp-ntk-projects' ), true ) && WP_NTK_Network::valid_project_dir( $parts[1] );
     if ( ! $file_ok || ( ! $old_ok && ! $new_ok ) ) { throw new RuntimeException( 'Некорректная запись реестра выгрузки.' ); }
     if ( ! $this->command( $parts, 'del "' . $name . '"' ) ) { throw new RuntimeException( 'Не удалось удалить устаревший файл в сетевой папке.' ); }
     unset( $all[$target][$relative] ); if ( ! $this->store_manifest( $all ) ) { throw new RuntimeException( 'Не удалось обновить реестр выгрузки.' ); }
