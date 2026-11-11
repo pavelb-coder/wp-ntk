@@ -175,7 +175,7 @@ final class WP_NTK_Project_Export {
     $project_rows = array(
      array( 'Название проекта', $p->post_title ),
      array( 'Номинация', isset( $names[$nom] ) ? $names[$nom] : 'Номинация ' . $nom ),
-     array( 'Номер номинации', $nom ), array( 'Описание проекта', $p->post_content ),
+     array( 'Описание проекта', $p->post_content ),
      array( 'Дата создания', $p->post_date )
     );
     if ( $list ) { foreach ( $list as $item ) { $project_rows[] = array( 'Вложение: ' . $item['раздел'], $item['имя_оригинала'] . ' (в папке: ' . $item['имя_в_папке'] . ')' ); } }
