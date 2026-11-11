@@ -59,8 +59,8 @@ final class WP_NTK_Project_Files {
   $this->allowed(); $sections = self::sections();
   echo '<div class="wrap"><h1>Файлы проектов</h1>';
   if ( isset( $_GET['saved'] ) ) { echo '<div class="notice notice-success"><p>Разделы сохранены.</p></div>'; }
-  if ( ! self::root() ) { echo '<div class="notice notice-error"><p>Закрытая папка не настроена или недоступна. Загрузка отключена. Администратор сервера должен создать папку вне корня сайта и прописать её абсолютный путь в wp-config.php: <code>define( \'WP_NTK_PRIVATE_DIR\', \'/путь/вне/webroot/ntk-private\' );</code>. Папка должна быть доступна PHP для записи; убедитесь, что она недоступна по HTTP и не опубликована другим веб-сервером.</p></div>'; }
-  else { echo '<div class="notice notice-success"><p>Папка хранения найдена. Дополнительно проверьте, что она недоступна по HTTP.</p></div>'; }
+  if ( ! self::smb_ready( true ) ) { echo '<div class="notice notice-error"><p>Сетевая папка недоступна для хранения вложений. Проверьте настройки раздела «Сетевая папка», smbclient и права записи. Старые файлы, загруженные в локальную закрытую папку, остаются в ней.</p></div>'; }
+  else { echo '<div class="notice notice-success"><p>Сетевая папка для новых вложений доступна. Ограничьте доступ к ней средствами SMB.</p></div>'; }
   echo '<p>По одному файлу в каждом включённом разделе. Изменения и удаление файлов возможны только до окончания приёма. Выключенный раздел скрывается из форм; ранее загруженные файлы сохраняются. Экспорт в SMB настраивается отдельно в разделе «Экспорт проектов». Ограничения PHP и веб-сервера могут быть ниже указанных.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_file_sections">'; wp_nonce_field( 'wp_ntk_file_sections' );
   foreach ( $sections as $key => $section ) { echo '<hr><h2>' . esc_html( $section['name'] ) . '</h2>'; $this->row( 'sections[' . $key . ']', $section ); }
   echo '<hr><h2>Добавить раздел</h2><p>Оставьте название пустым, если не добавляете раздел.</p>'; $this->row( 'new_section', array( 'name' => '', 'max' => 10, 'required' => 0, 'active' => 1, 'types' => array( 'pdf' ) ) );
@@ -76,11 +76,69 @@ final class WP_NTK_Project_Files {
   $target = array( 'docx'=>'word/document.xml', 'xlsx'=>'xl/workbook.xml', 'pptx'=>'ppt/presentation.xml' );
   $ok = false !== $zip->locateName( '[Content_Types].xml' ) && false !== $zip->locateName( $target[$ext] ); $zip->close(); return $ok;
  }
- private static function remove_blob( $blob ) {
-  $root = self::root(); if ( ! $root || ! is_string( $blob ) || ! preg_match( '/^[a-f0-9]{40}\.bin$/D', $blob ) ) { return; }
-  $path = $root . DIRECTORY_SEPARATOR . $blob; if ( is_file( $path ) && ! is_link( $path ) && ! @unlink( $path ) ) { error_log( 'WP NTK: не удалось удалить файл проекта из закрытого хранилища: ' . $blob ); }
+ /** Идентификатор ресурса не позволяет незаметно читать файлы с другого SMB-пути. */
+ private static function target() {
+  $config = get_option( WP_NTK_Network::CONFIG, array() );
+  if ( ! is_array( $config ) || empty( $config['path'] ) || ! is_string( $config['path'] ) ) { return false; }
+  return hash( 'sha256', strtolower( str_replace( '\\', '/', trim( $config['path'] ) ) ) );
  }
- public static function rollback( $new ) { foreach ( $new as $blob ) { self::remove_blob( $blob ); } }
+ private static function smb_dirs() { return array( 'wp-ntk-private', 'site-' . (int) get_current_blog_id() ); }
+ private static function smb_ready( $create = false, $target = null ) {
+  if ( null === $target ) { $target = self::target(); }
+  if ( ! $target ) { return false; }
+  $net = new WP_NTK_Network(); $parent = array();
+  foreach ( self::smb_dirs() as $dir ) {
+   $path = array_merge( $parent, array( $dir ) );
+   if ( ! $net->project_command( $path, 'ls', false, $target ) ) {
+    if ( ! $create || ( ! $net->project_command( $parent, 'mkdir "' . $dir . '"', false, $target ) && ! $net->project_command( $path, 'ls', false, $target ) ) ) { return false; }
+   }
+   $parent = $path;
+  }
+  return true;
+ }
+ private static function valid_blob( $blob ) { return is_string( $blob ) && (bool) preg_match( '/^[a-f0-9]{40}\\.bin$/D', $blob ); }
+ private static function remote_path_safe( $path ) { return is_string( $path ) && false === strpbrk( $path, "\";\\\r\n" ); }
+ /** Защищённый временный файл нужен только на время чтения из SMB. */
+ private static function temporary() {
+  $dir = realpath( sys_get_temp_dir() ); $doc = ! empty( $_SERVER['DOCUMENT_ROOT'] ) ? realpath( $_SERVER['DOCUMENT_ROOT'] ) : false;
+  if ( ! $dir || ! $doc ) { return false; }
+  foreach ( array( $doc, realpath( ABSPATH ), realpath( WP_CONTENT_DIR ) ) as $public ) {
+   if ( $public && ( $dir === $public || 0 === strpos( $dir . DIRECTORY_SEPARATOR, rtrim( $public, DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR ) || 0 === strpos( $public . DIRECTORY_SEPARATOR, rtrim( $dir, DIRECTORY_SEPARATOR ) . DIRECTORY_SEPARATOR ) ) ) { return false; }
+  }
+  $file = tempnam( $dir, 'ntkfile_' );
+  if ( ! $file || ! self::remote_path_safe( $file ) || ! chmod( $file, 0600 ) ) { if ( $file ) { @unlink( $file ); } return false; }
+  return $file;
+ }
+ private static function storage_ready( $f ) {
+  if ( ! is_array( $f ) ) { return false; }
+  if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) { return ! empty( $f['target'] ) && self::target() === $f['target'] && self::smb_ready(); }
+  return (bool) self::root();
+ }
+ private static function remove_blob( $f ) {
+  if ( ! is_array( $f ) || empty( $f['blob'] ) || ! self::valid_blob( $f['blob'] ) ) { return false; }
+  if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) {
+   if ( empty( $f['target'] ) || self::target() !== $f['target'] ) { return false; }
+   $net = new WP_NTK_Network(); return $net->project_command( self::smb_dirs(), 'del "' . $f['blob'] . '"', false, $f['target'] );
+  }
+  $root = self::root(); if ( ! $root ) { return false; }
+  $path = $root . DIRECTORY_SEPARATOR . $f['blob'];
+  return ! is_link( $path ) && ( ! is_file( $path ) || @unlink( $path ) );
+ }
+ public static function rollback( $new ) { foreach ( $new as $f ) { if ( ! self::remove_blob( $f ) ) { error_log( 'WP NTK: не удалось удалить файл из закрытого хранилища.' ); } } }
+ /** Возвращает путь к временному файлу SMB или локальному файлу старого формата. */
+ public static function local_copy( $f, &$temporary ) {
+  $temporary = false;
+  if ( ! is_array( $f ) || empty( $f['blob'] ) || ! self::valid_blob( $f['blob'] ) ) { return false; }
+  if ( isset( $f['storage'] ) && 'smb' === $f['storage'] ) {
+   if ( empty( $f['target'] ) || self::target() !== $f['target'] || ! self::smb_ready( false, $f['target'] ) ) { return false; }
+   $tmp = self::temporary(); if ( ! $tmp ) { return false; }
+   $net = new WP_NTK_Network();
+   if ( ! $net->project_command( self::smb_dirs(), 'get "' . $f['blob'] . '" "' . $tmp . '"', false, $f['target'] ) || ! is_file( $tmp ) || ! is_readable( $tmp ) ) { @unlink( $tmp ); return false; }
+   $temporary = true; return $tmp;
+  }
+  $root = self::root(); if ( ! $root ) { return false; }
+  $path = $root . DIRECTORY_SEPARATOR . $f['blob']; return is_file( $path ) && ! is_link( $path ) && is_readable( $path ) ? $path : false;
+ }
  /** Проверяет и переносит загруженные файлы; при ошибке удаляет все новые файлы. */
  public static function prepare( $id ) {
   $current = self::files( $id ); $files = $current; $new = array(); $retired = array(); $errors = array(); $sections = self::sections();
@@ -89,21 +147,26 @@ final class WP_NTK_Project_Files {
    $u = isset( $_FILES['wp_ntk_attachment'] ) && is_array( $_FILES['wp_ntk_attachment'] ) ? $_FILES['wp_ntk_attachment'] : array();
    $err = isset( $u['error'][$key] ) && is_int( $u['error'][$key] ) ? $u['error'][$key] : UPLOAD_ERR_NO_FILE;
    $remove = isset( $_POST['wp_ntk_remove_file'][$key] ) && '1' === $_POST['wp_ntk_remove_file'][$key];
-   if ( UPLOAD_ERR_NO_FILE === $err ) { if ( $remove && isset( $files[$key] ) ) { if ( ! self::root() ) { $errors[] = 'Закрытая папка для файлов недоступна. Обратитесь к администратору.'; } else { $retired[] = $files[$key]['blob']; unset( $files[$key] ); } } }
+   if ( UPLOAD_ERR_NO_FILE === $err ) { if ( $remove && isset( $files[$key] ) ) { if ( ! self::storage_ready( $files[$key] ) ) { $errors[] = 'Хранилище файла недоступно. Обратитесь к администратору.'; } else { $retired[] = $files[$key]; unset( $files[$key] ); } } }
    elseif ( UPLOAD_ERR_OK !== $err ) { $errors[] = 'Ошибка загрузки файла: ' . $section['name'] . '.'; }
    else {
-    $root = self::root(); $name = isset( $u['name'][$key] ) && is_string( $u['name'][$key] ) ? sanitize_file_name( wp_unslash( $u['name'][$key] ) ) : '';
+    $name = isset( $u['name'][$key] ) && is_string( $u['name'][$key] ) ? sanitize_file_name( wp_unslash( $u['name'][$key] ) ) : '';
     $tmp = isset( $u['tmp_name'][$key] ) && is_string( $u['tmp_name'][$key] ) ? $u['tmp_name'][$key] : '';
     $size = $tmp && is_uploaded_file( $tmp ) ? filesize( $tmp ) : false;
     $ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ); if ( 'jpeg' === $ext ) { $ext = 'jpg'; }
-    if ( ! $root ) { $errors[] = 'Закрытая папка для файлов не настроена. Обратитесь к администратору.'; }
+    if ( isset( $files[$key] ) && ! self::storage_ready( $files[$key] ) ) { $errors[] = 'Хранилище прежнего файла недоступно. Обратитесь к администратору.'; }
     elseif ( ! $size || $size > (int) $section['max'] * 1048576 || $size > wp_max_upload_size() ) { $errors[] = 'Файл раздела «' . $section['name'] . '» пуст или превышает разрешённый размер.'; }
     elseif ( ! in_array( $ext, $section['types'], true ) || ! self::valid_file( $tmp, $ext ) ) { $errors[] = 'Недопустимый формат файла в разделе «' . $section['name'] . '».'; }
     else {
      try { $blob = bin2hex( random_bytes( 20 ) ) . '.bin'; } catch ( Throwable $e ) { $blob = ''; }
-     if ( ! $blob || file_exists( $root . DIRECTORY_SEPARATOR . $blob ) || ! move_uploaded_file( $tmp, $root . DIRECTORY_SEPARATOR . $blob ) ) { $errors[] = 'Не удалось сохранить файл раздела «' . $section['name'] . '».'; }
-     elseif ( ! chmod( $root . DIRECTORY_SEPARATOR . $blob, 0600 ) ) { @unlink( $root . DIRECTORY_SEPARATOR . $blob ); $errors[] = 'Не удалось защитить файл раздела «' . $section['name'] . '».'; }
-     else { $new[] = $blob; if ( isset( $files[$key]['blob'] ) ) { $retired[] = $files[$key]['blob']; } $files[$key] = array( 'blob' => $blob, 'name' => $name, 'section' => $section['name'], 'ext' => $ext, 'size' => $size ); }
+     $record = array( 'blob' => $blob, 'storage' => 'smb', 'target' => self::target(), 'name' => $name, 'section' => $section['name'], 'ext' => $ext, 'size' => $size );
+     $net = new WP_NTK_Network(); $dirs = self::smb_dirs();
+     if ( ! $blob || ! $record['target'] || ! self::remote_path_safe( $tmp ) || ! self::smb_ready( true, $record['target'] ) || 'missing' !== $net->project_command( $dirs, 'ls "' . $blob . '"', true, $record['target'] ) ) { $errors[] = 'Сетевая папка для файлов недоступна. Обратитесь к администратору.'; }
+     else {
+      $new[] = $record;
+      if ( ! $net->project_command( $dirs, 'put "' . $tmp . '" "' . $blob . '"', false, $record['target'] ) ) { $errors[] = 'Не удалось передать файл раздела «' . $section['name'] . '» в сетевую папку.'; }
+      else { if ( isset( $files[$key]['blob'] ) ) { $retired[] = $files[$key]; } $files[$key] = $record; }
+     }
     }
    }
    if ( ! empty( $section['required'] ) && ! isset( $files[$key] ) ) { $errors[] = 'Прикрепите файл в разделе «' . $section['name'] . '».'; }
@@ -114,7 +177,7 @@ final class WP_NTK_Project_Files {
  public static function commit( $id, $prepared ) {
   $expected = $prepared['files']; update_post_meta( $id, self::META, $expected );
   if ( self::files( $id ) !== $expected ) { self::rollback( $prepared['new'] ); return false; }
-  foreach ( $prepared['retired'] as $blob ) { self::remove_blob( $blob ); } return true;
+  foreach ( $prepared['retired'] as $f ) { if ( ! self::remove_blob( $f ) ) { error_log( 'WP NTK: не удалось удалить прежний файл проекта из хранилища.' ); } } return true;
  }
  public static function url( $id, $key ) { return wp_nonce_url( add_query_arg( array( 'action' => 'wp_ntk_project_download', 'project' => $id, 'section' => $key ), admin_url( 'admin-post.php' ) ), 'wp_ntk_file_' . $id . '_' . $key ); }
  public function download() {
@@ -124,11 +187,11 @@ final class WP_NTK_Project_Files {
   check_admin_referer( 'wp_ntk_file_' . $id . '_' . $key );
   $p = get_post( $id ); $admin = current_user_can( 'manage_options' );
   if ( ! $p || WP_NTK_Projects::TYPE !== $p->post_type || ! in_array( $p->post_status, array( 'private','trash' ), true ) || ! is_user_logged_in() || ( ! $admin && ( 'private' !== $p->post_status || (int) $p->post_author !== get_current_user_id() ) ) ) { wp_die( 'Файл недоступен.', '', array( 'response' => 403 ) ); }
-  $files = self::files( $id ); $f = isset( $files[$key] ) && is_array( $files[$key] ) ? $files[$key] : array(); $root = self::root();
-  if ( ! $root || empty( $f['blob'] ) || ! preg_match( '/^[a-f0-9]{40}\.bin$/D', $f['blob'] ) ) { wp_die( 'Файл недоступен.', '', array( 'response' => 404 ) ); }
-  $path = $root . DIRECTORY_SEPARATOR . $f['blob']; if ( ! is_file( $path ) || is_link( $path ) || ! is_readable( $path ) ) { wp_die( 'Файл недоступен.', '', array( 'response' => 404 ) ); }
+  $files = self::files( $id ); $f = isset( $files[$key] ) && is_array( $files[$key] ) ? $files[$key] : array();
+  $temporary = false; $path = self::local_copy( $f, $temporary );
+  if ( ! $path ) { wp_die( 'Файл недоступен.', '', array( 'response' => 404 ) ); }
   $name = isset( $f['name'] ) ? sanitize_file_name( $f['name'] ) : 'file'; $name = str_replace( array( '"', "\r", "\n" ), '', $name );
-  nocache_headers(); header( 'Content-Type: application/octet-stream' ); header( 'X-Content-Type-Options: nosniff' ); header( 'Content-Disposition: attachment; filename="download.' . ( isset( $f['ext'] ) && isset( self::TYPES[$f['ext']] ) ? $f['ext'] : 'bin' ) . '"; filename*=UTF-8\'\'' . rawurlencode( $name ) ); header( 'Content-Length: ' . filesize( $path ) ); readfile( $path ); exit;
+  nocache_headers(); header( 'Content-Type: application/octet-stream' ); header( 'X-Content-Type-Options: nosniff' ); header( 'Content-Disposition: attachment; filename="download.' . ( isset( $f['ext'] ) && isset( self::TYPES[$f['ext']] ) ? $f['ext'] : 'bin' ) . '"; filename*=UTF-8\'\'' . rawurlencode( $name ) ); header( 'Content-Length: ' . filesize( $path ) ); readfile( $path ); if ( $temporary ) { @unlink( $path ); } exit;
  }
- public function delete_project_files( $id, $post ) { if ( $post && WP_NTK_Projects::TYPE === $post->post_type ) { do_action( 'wp_ntk_project_changed' ); foreach ( self::files( $id ) as $f ) { if ( isset( $f['blob'] ) ) { self::remove_blob( $f['blob'] ); } } } }
+ public function delete_project_files( $id, $post ) { if ( $post && WP_NTK_Projects::TYPE === $post->post_type ) { do_action( 'wp_ntk_project_changed' ); foreach ( self::files( $id ) as $f ) { if ( isset( $f['blob'] ) && ! self::remove_blob( $f ) ) { error_log( 'WP NTK: не удалось удалить файл удалённого проекта из хранилища.' ); } } } }
 }

@@ -52,6 +52,10 @@ final class WP_NTK_Network {
   $path = $this->read( 'path' ); $user = $this->read( 'user' ); $domain = $this->read( 'domain' ); $password = isset( $_POST['password'] ) && is_string( $_POST['password'] ) ? wp_unslash( $_POST['password'] ) : '';
   if ( ! $this->parse_path( $path ) || '' === $user || strlen( $user ) > 200 || strlen( $domain ) > 200 || strlen( $password ) > 1024 || preg_match( '/[\r\n\x00]/', $user . $domain . $password ) ) { wp_die( 'Проверьте UNC-путь и логин: путь должен иметь вид //сервер/ресурс/каталог, без пустых и специальных компонентов.' ); }
   $c = $this->config();
+  $new_target = hash( 'sha256', strtolower( str_replace( '\\', '/', trim( $path ) ) ) );
+  // При смене ресурса действующие вложения не должны незаметно стать недоступными.
+  $ids = get_posts( array( 'post_type' => WP_NTK_Projects::TYPE, 'post_status' => array( 'private', 'trash' ), 'numberposts' => -1, 'fields' => 'ids', 'suppress_filters' => true ) );
+  foreach ( $ids as $id ) { foreach ( WP_NTK_Project_Files::files( $id ) as $f ) { if ( isset( $f['storage'] ) && 'smb' === $f['storage'] && ( empty( $f['target'] ) || $new_target !== $f['target'] ) ) { wp_die( 'Нельзя изменить путь SMB: в прежней сетевой папке хранятся вложения проектов. Сначала обеспечьте безопасный перенос и сохранность файлов.' ); } } }
   if ( '' !== $password ) { $c['secret'] = $this->encrypt( $password ); if ( false === $c['secret'] ) { wp_die( 'Не удалось зашифровать пароль: требуется расширение OpenSSL.' ); } }
   if ( empty( $c['secret'] ) || false === $this->decrypt( $c['secret'] ) ) { wp_die( 'Укажите пароль для сетевой папки.' ); }
   $c['path'] = $path; $c['user'] = $user; $c['domain'] = $domain; $c['auto'] = empty( $_POST['auto'] ) ? 0 : 1;
@@ -111,8 +115,10 @@ final class WP_NTK_Network {
   return $ok;
  }
  /** Операция в выделенной подпапке проектов; команды и имена формируются самим плагином. */
- public function project_command( $dirs, $command, $probe = false ) {
-  $c = $this->config(); $parsed = $this->parse_path( isset( $c['path'] ) ? $c['path'] : '' );
+ public function project_command( $dirs, $command, $probe = false, $expected_target = null ) {
+  $c = $this->config();
+  if ( null !== $expected_target && ( empty( $c['path'] ) || ! is_string( $c['path'] ) || $expected_target !== hash( 'sha256', strtolower( str_replace( '\\', '/', trim( $c['path'] ) ) ) ) ) ) { return false; }
+  $parsed = $this->parse_path( isset( $c['path'] ) ? $c['path'] : '' );
   $password = $this->decrypt( isset( $c['secret'] ) ? $c['secret'] : '' );
   if ( ! $parsed || false === $password || empty( $c['user'] ) || ! function_exists( 'proc_open' ) || ! is_array( $dirs ) || ! is_string( $command ) || preg_match( '/[\r\n;]/', $command ) ) { return false; }
   foreach ( $dirs as $dir ) { if ( ! is_string( $dir ) || ! preg_match( '/^[A-Za-z0-9_.-]{1,100}$/D', $dir ) || '.' === $dir || '..' === $dir ) { return false; } }
