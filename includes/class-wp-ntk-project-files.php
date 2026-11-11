@@ -161,6 +161,21 @@ final class WP_NTK_Project_Files {
   $root = self::root(); if ( ! $root ) { return false; }
   $path = $root . DIRECTORY_SEPARATOR . $f['blob']; return is_file( $path ) && ! is_link( $path ) && is_readable( $path ) ? $path : false;
  }
+ /** Удаление одного необязательного вложения; сохранение метаданных предшествует удалению копии. */
+ public static function delete_one( $id, $key, $blob ) {
+  $sections = self::sections();
+  if ( ! isset( $sections[$key] ) || empty( $sections[$key]['active'] ) ) { return 'unavailable'; }
+  if ( ! empty( $sections[$key]['required'] ) ) { return 'required'; }
+  $previous = self::files( $id );
+  if ( ! isset( $previous[$key] ) || ! is_array( $previous[$key] ) || ! isset( $previous[$key]['blob'] ) || $blob !== $previous[$key]['blob'] ) { return 'changed'; }
+  $file = $previous[$key]; if ( ! self::storage_ready( $file ) ) { return 'storage'; }
+  $remaining = $previous; unset( $remaining[$key] );
+  // Старое значение обязательно: не затираем одновременное изменение другого поля.
+  if ( false === update_post_meta( $id, self::META, wp_slash( $remaining ), $previous ) ) { return 'changed'; }
+  do_action( 'wp_ntk_project_changed' );
+  if ( ! self::remove_blob( $file ) ) { error_log( 'WP NTK: метаданные вложения удалены, но не удалось удалить файл из хранилища: ' . $file['blob'] ); return 'cleanup'; }
+  return 'deleted';
+ }
  /** Проверяет и переносит загруженные файлы; при ошибке удаляет все новые файлы. */
  public static function prepare( $id ) {
   $current = self::files( $id ); $files = $current; $new = array(); $retired = array(); $errors = array(); $sections = self::sections();

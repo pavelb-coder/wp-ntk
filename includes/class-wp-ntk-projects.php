@@ -13,6 +13,7 @@ final class WP_NTK_Projects {
   add_action( 'admin_menu', array( $this, 'menu' ), 20 );
   add_action( 'admin_post_wp_ntk_projects_settings', array( $this, 'save_settings' ) );
   add_action( 'admin_post_wp_ntk_project_manage', array( $this, 'manage_project' ) );
+  add_action( 'admin_post_wp_ntk_remove_project_file', array( $this, 'remove_file' ) );
  }
  public function register_type() {
   register_post_type( self::TYPE, array( 'public' => false, 'show_ui' => false, 'show_in_rest' => false, 'supports' => array( 'title', 'editor', 'author' ) ) );
@@ -87,6 +88,19 @@ final class WP_NTK_Projects {
   do_action( 'wp_ntk_project_changed' );
   wp_safe_redirect( add_query_arg( array( 'page' => 'wp-ntk-projects', 'view' => 'trash' === $operation ? 'active' : 'trash', 'project_result' => 'trash' === $operation ? 'trashed' : 'restored' ), admin_url( 'admin.php' ) ) . '#wp-ntk-admin-projects' ); exit;
  }
+ /** Отдельная отправка удаляет только файл и не сохраняет остальные поля проекта. */
+ public function remove_file() {
+  if ( ! $this->can_register() ) { wp_die( 'Недостаточно прав.', '', array( 'response' => 403 ) ); }
+  $raw_id = $this->post_value( 'project_id' ); $key = $this->post_value( 'section' ); $blob = $this->post_value( 'blob' );
+  if ( ! ctype_digit( $raw_id ) || (int) $raw_id <= 0 || ! preg_match( '/^f_[a-f0-9]{12}$/D', $key ) || ! preg_match( '/^[a-f0-9]{40}\\.bin$/D', $blob ) ) { wp_die( 'Некорректные данные.', '', array( 'response' => 400 ) ); }
+  $id = (int) $raw_id; check_admin_referer( 'wp_ntk_remove_file_' . $id . '_' . $key . '_' . $blob );
+  $post = get_post( $id );
+  if ( ! $post || self::TYPE !== $post->post_type || 'private' !== $post->post_status || (int) $post->post_author !== get_current_user_id() ) { wp_die( 'Проект не найден или недоступен.', '', array( 'response' => 403 ) ); }
+  $result = 'open' === $this->period()['state'] ? WP_NTK_Project_Files::delete_one( $id, $key, $blob ) : 'closed';
+  $redirect = wp_validate_redirect( $this->post_value( 'return_url' ), home_url( '/' ) );
+  $redirect = remove_query_arg( array( 'ntk_project_saved', 'ntk_project_view', 'ntk_file_result' ), $redirect );
+  wp_safe_redirect( add_query_arg( array( 'wp_ntk_tab' => 'projects', 'ntk_project_form' => $id, 'ntk_file_result' => $result ), $redirect ) . '#wp-ntk-projects' ); exit;
+ }
  public function admin_page() {
   if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Недостаточно прав.' ); }
   $c = $this->settings(); $paged = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
@@ -158,6 +172,9 @@ final class WP_NTK_Projects {
   $q = new WP_Query( array( 'post_type' => self::TYPE, 'post_status' => 'private', 'author' => get_current_user_id(), 'posts_per_page' => 20, 'paged' => $paged, 'orderby' => 'ID', 'order' => 'DESC' ) );
   echo '<section id="wp-ntk-projects"><h2 class="wp-ntk-title">Проекты</h2>';
   if ( isset( $_GET['ntk_project_saved'] ) ) { echo '<div class="wp-ntk-notice wp-ntk-notice--success">Проект сохранён.</div>'; }
+  $file_result = isset( $_GET['ntk_file_result'] ) && is_string( $_GET['ntk_file_result'] ) ? sanitize_key( wp_unslash( $_GET['ntk_file_result'] ) ) : '';
+  $file_messages = array( 'deleted' => 'Файл удалён.', 'cleanup' => 'Файл исключён из проекта, но копию в хранилище удалить не удалось. Обратитесь к администратору.', 'required' => 'Файл обязательного раздела нельзя удалить отдельно. Чтобы заменить его, выберите другой файл и сохраните проект.', 'storage' => 'Хранилище файла недоступно. Файл не удалён.', 'changed' => 'Файл уже изменился или данные устарели. Обновите страницу и попробуйте снова.', 'unavailable' => 'Раздел недоступен. Файл не удалён.', 'closed' => 'Приём завершён или ещё не открыт. Изменять файлы нельзя.' );
+  if ( isset( $file_messages[$file_result] ) ) { echo '<div class="wp-ntk-notice wp-ntk-notice--' . ( 'deleted' === $file_result ? 'success' : 'error' ) . '" role="status">' . esc_html( $file_messages[$file_result] ) . '</div>'; }
   if ( 'unset' === $period['state'] ) { echo '<p>Период регистрации проектов ещё не настроен.</p>'; }
   else {
    if ( 'open' === $period['state'] ) { echo '<p>Приём открыт. <span class="wp-ntk-countdown" data-end="' . esc_attr( $period['end']->getTimestamp() ) . '" data-now="' . esc_attr( time() ) . '"></span></p>'; }
@@ -206,10 +223,19 @@ final class WP_NTK_Projects {
     echo '<p class="wp-ntk-hint">Форматы: ' . esc_html( implode( ', ', $section['types'] ) ) . '; до ' . (int) $section['max'] . ' МБ. Один файл.</p>';
     if ( $existing ) { echo '<p>Текущий файл: <a href="' . esc_url( WP_NTK_Project_Files::url( $v['id'], $key ) ) . '">' . esc_html( $existing['name'] ) . '</a></p>'; }
     echo '<input class="wp-ntk-input wp-ntk-project-file" type="file" id="wp-ntk-file-' . esc_attr( $key ) . '" name="wp_ntk_attachment[' . esc_attr( $key ) . ']" accept="' . esc_attr( implode( ',', $accept ) ) . '" aria-describedby="wp-ntk-file-error-' . esc_attr( $key ) . '"' . ( ! empty( $section['required'] ) && ! $existing ? ' required' : '' ) . '><p class="wp-ntk-file-error" id="wp-ntk-file-error-' . esc_attr( $key ) . '" role="alert"></p>';
-    if ( $existing ) { echo '<p class="wp-ntk-check"><label><input type="checkbox" name="wp_ntk_remove_file[' . esc_attr( $key ) . ']" value="1"> Удалить текущий файл</label></p>'; }
+    if ( $existing ) {
+     if ( ! empty( $section['required'] ) ) { echo '<p><button type="button" class="wp-ntk-button wp-ntk-button--disabled" disabled>Удалить текущий файл</button><br><small>Файл обязателен. Чтобы заменить его, выберите новый и сохраните проект.</small></p>'; }
+     else { echo '<p><button type="submit" class="wp-ntk-button" form="wp-ntk-remove-' . esc_attr( $key ) . '" onclick="return confirm(&quot;Удалить файл сейчас? Несохранённые изменения проекта будут потеряны.&quot;);">Удалить текущий файл</button><br><small>Копия в выгрузке будет удалена при следующей синхронизации.</small></p>'; }
+    }
     echo '</div>';
    }
    echo '<button class="wp-ntk-button" type="submit">Сохранить проект</button></form>';
+   foreach ( WP_NTK_Project_Files::sections() as $key => $section ) {
+    if ( empty( $section['active'] ) || ! empty( $section['required'] ) || empty( $uploaded[$key]['blob'] ) ) { continue; }
+    $blob = $uploaded[$key]['blob'];
+    echo '<form id="wp-ntk-remove-' . esc_attr( $key ) . '" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="wp_ntk_remove_project_file"><input type="hidden" name="project_id" value="' . (int) $v['id'] . '"><input type="hidden" name="section" value="' . esc_attr( $key ) . '"><input type="hidden" name="blob" value="' . esc_attr( $blob ) . '"><input type="hidden" name="return_url" value="' . esc_url( $this->page_url() ) . '">';
+    wp_nonce_field( 'wp_ntk_remove_file_' . $v['id'] . '_' . $key . '_' . $blob ); echo '</form>';
+   }
   }
   echo '</section>';
  }
