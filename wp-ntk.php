@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WP NTK
  * Description:       Личный кабинет наставника проекта с формой регистрации.
- * Version:           10.0.0
+ * Version:           10.1.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Text Domain:       wp-ntk
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Версия плагина в формате x.y.z. Должна совпадать с полем Version в заголовке
 // и со Stable tag в readme.txt.
-define( 'WP_NTK_VERSION', '10.0.0' );
+define( 'WP_NTK_VERSION', '10.1.0' );
 
 define( 'WP_NTK_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WP_NTK_URL', plugin_dir_url( __FILE__ ) );
@@ -29,6 +29,7 @@ require_once WP_NTK_DIR . 'includes/class-wp-ntk-admin.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-panel.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-field-editor.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-network.php';
+require_once WP_NTK_DIR . 'includes/class-wp-ntk-project-fields.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-projects.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-project-files.php';
 require_once WP_NTK_DIR . 'includes/class-wp-ntk-export-documents.php';
@@ -48,6 +49,8 @@ function wp_ntk_init() {
 	$notifications->hooks();
 	$project_files = new WP_NTK_Project_Files();
 	$project_files->hooks();
+	$project_fields = new WP_NTK_Project_Fields();
+	$project_fields->hooks();
 	$projects = new WP_NTK_Projects();
 	$projects->hooks();
 	$network = new WP_NTK_Network();

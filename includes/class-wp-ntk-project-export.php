@@ -178,6 +178,8 @@ final class WP_NTK_Project_Export {
      array( 'Описание проекта', $p->post_content ),
      array( 'Дата создания', $p->post_date )
     );
+    $extra_fields = WP_NTK_Project_Fields::ordered(); $extra_values = WP_NTK_Project_Fields::values( $p->ID, $extra_fields );
+    foreach ( $extra_fields as $field_key => $field ) { $project_rows[] = array( $field['label'], WP_NTK_Project_Fields::display_value( $field, $extra_values[$field_key] ) ); }
     if ( $list ) { foreach ( $list as $item ) { $project_rows[] = array( 'Вложение: ' . $item['раздел'], $item['имя_оригинала'] . ' (в папке: ' . $item['имя_в_папке'] . ')' ); } }
     else { $project_rows[] = array( 'Вложения', 'Нет' ); }
     $mentor_rows = array( array( 'ID наставника', (string) $p->post_author ), array( 'Имя пользователя', $author ? $author->display_name : 'Учётная запись недоступна' ), array( 'Email аккаунта', $author ? $author->user_email : '' ), array( 'Дата регистрации', $author ? $author->user_registered : '' ) );
